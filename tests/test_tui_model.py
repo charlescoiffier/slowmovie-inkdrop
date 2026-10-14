@@ -26,7 +26,8 @@ def test_setting_fields_cover_every_user_setting():
     names = {name for name, _, _ in model.SETTING_FIELDS}
     for expected in ("delay", "increment", "random_file", "random_frames", "loop", "contrast",
                      "fullscreen", "subtitles", "timecode", "min_image_seconds",
-                     "max_image_seconds", "queue_max", "active_hours", "relay_url"):
+                     "max_image_seconds", "queue_max", "active_hours", "relay_url",
+                     "caption_max_chars"):
         assert expected in names
     assert "relay_token" not in names           # jamais affiché à l'écran
     assert names <= set(Settings.__dataclass_fields__)

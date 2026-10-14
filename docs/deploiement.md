@@ -37,6 +37,8 @@ Notes :
 - Pour borner aussi la taille des corps de requête côté Traefik, ajouter aux labels du service :
   `traefik.http.middlewares.slowmovie-limit.buffering.maxRequestBodyBytes=12582912` et l'associer au routeur.
   Le relais refuse déjà tout envoi sans `Content-Length` ou de plus de 10 Mo.
+- Le texte sous l'image est limité à 128 caractères côté relais (`SLOWMOVIE_RELAY_CAPTION_MAX` pour changer) ; le Pi
+  applique de son côté `caption-max-chars` (128 par défaut) et ne fait pas confiance au relais.
 - Le relais lit l'adresse du visiteur dans le dernier élément de `X-Forwarded-For` (ajouté par Traefik) pour limiter
   les essais de mot de passe : c'est correct derrière un seul proxy de confiance.
 
@@ -48,7 +50,7 @@ Notes :
    ./deploy/install-pi.sh
    ```
 
-   Le script installe ffmpeg, Samba, avahi et rsync, crée l'environnement Python dans `/home/admin/SlowMovie`,
+   Le script installe ffmpeg, Samba, avahi, rsync et la police DejaVu (accents du texte sous l'image), crée l'environnement Python dans `/home/admin/SlowMovie`,
    publie le partage Samba « SlowMovie » (dossier `Videos`) et active le service `slowmovie`.
 
 2. Pour être joignable sous le nom `slowmovie.local` : `sudo hostnamectl set-hostname slowmovie`.
@@ -101,6 +103,7 @@ Variables facultatives : `SLOWMOVIE_HOST` (défaut `slowmovie.local`), `SLOWMOVI
 - [ ] `slowmovie add ~/Movies/un-film.mp4` : le film passe « prêt » dans l'onglet Films en moins d'une minute (délai de stabilisation de 30 s).
 - [ ] Glisser un film dans `smb://slowmovie.local/SlowMovie` : « copie en cours… » puis « prêt », jamais joué à moitié.
 - [ ] Depuis un téléphone en 4G, envoyer une photo prise en portrait (1 minute) : elle s'affiche bien orientée, puis le film reprend à la même image.
+- [ ] Envoyer une photo avec un texte de 128 caractères accentués (« Été à Paris… ») : il est lisible, centré en bas, sur 3 lignes au plus, sans carrés à la place des accents.
 - [ ] Envoyer deux images depuis deux appareils : affichées dans l'ordre, le film reprend après la seconde.
 - [ ] 5 mauvais mots de passe, puis le bon : blocage avec message ; un `.svg` et un GIF animé sont refusés.
 - [ ] Couper le relais 2 minutes : le film continue. Redémarrer le Pi pendant une image : elle reste jusqu'à l'échéance, sans boucle de redémarrage.

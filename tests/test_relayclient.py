@@ -160,3 +160,20 @@ def test_download_larger_than_the_limit_is_refused():
                          client=httpx.Client(transport=httpx.MockTransport(relay.handler)))
     with pytest.raises(Exception, match="lourde"):
         client.download(A)
+
+
+def test_caption_travels_with_the_image_and_is_cleaned_by_the_pi(tmp_path):
+    hostile = "ok\u202e\x00" + "z" * 400
+    relay = FakeRelay([{"id": A, "duration": 60, "caption": hostile}], {A: png()})
+    queue, outbox = make(tmp_path)
+    sync_cycle(relay.client(), queue, outbox, Settings(caption_max_chars=50), now=1)
+    caption = queue.items()[0].caption
+    assert caption.startswith("ok") and len(caption) == 50
+    assert "\u202e" not in caption and "\x00" not in caption
+
+
+def test_missing_caption_field_means_no_caption(tmp_path):
+    relay = FakeRelay([{"id": A, "duration": 60}], {A: png()})
+    queue, outbox = make(tmp_path)
+    sync_cycle(relay.client(), queue, outbox, Settings(), now=1)
+    assert queue.items()[0].caption == ""

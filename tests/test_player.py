@@ -231,7 +231,7 @@ def test_state_snapshot_fields(make_player):
     ctx.queue.add(B, png_bytes(), 90, ctx.clock())
     ctx.player.tick()
     state = json.loads(ctx.paths.state.read_text())
-    assert state["mode"] == "IMAGE" and state["queue"] == [{"id": B, "duration": 90}]
+    assert state["mode"] == "IMAGE" and state["queue"] == [{"id": B, "duration": 90, "caption": ""}]
     for key in ("paused", "video", "frame", "frame_count", "percent", "remaining_seconds",
                 "next_frame_at", "image_until", "active", "error", "relay_status", "updated_at"):
         assert key in state
@@ -262,3 +262,28 @@ def test_image_that_explodes_while_decoding_is_dropped_not_retried_forever(make_
     ctx.clock.advance(11)
     ctx.player.tick()
     assert ctx.frames.calls == [("a.mp4", 0)]           # le film revient
+
+
+def test_caption_is_drawn_on_the_displayed_image_only_when_present(make_player):
+    from PIL import ImageChops
+
+    plain = make_player()
+    plain.queue.add(A, png_bytes(size=(800, 480), color="gray"), 60, plain.clock())
+    plain.player.tick()
+    with_text = make_player(base=plain.paths.base / "other")
+    with_text.queue.add(B, png_bytes(size=(800, 480), color="gray"), 60, with_text.clock(),
+                        caption="Joyeux anniversaire")
+    with_text.player.tick()
+    diff = ImageChops.difference(plain.display.shown[-1], with_text.display.shown[-1]).getbbox()
+    assert diff is not None and diff[1] > 480 * 0.8        # texte en bas, rien ailleurs
+
+
+def test_overlong_caption_from_the_queue_is_cut_to_the_setting(make_player):
+    ctx = make_player(caption_max_chars=5)
+    ctx.queue.add(A, png_bytes(size=(800, 480), color="gray"), 60, ctx.clock(), caption="x" * 100)
+    ctx.player.tick()
+    short = make_player(base=ctx.paths.base / "o2", caption_max_chars=5)
+    short.queue.add(B, png_bytes(size=(800, 480), color="gray"), 60, short.clock(), caption="x" * 5)
+    short.player.tick()
+    from PIL import ImageChops
+    assert ImageChops.difference(ctx.display.shown[-1], short.display.shown[-1]).getbbox() is None

@@ -68,3 +68,15 @@ def test_corrupt_metadata_is_ignored(tmp_path):
     q = ImageQueue(tmp_path)
     (tmp_path / f"{A}.json").write_text("{pas du json")
     assert q.items() == []
+
+
+def test_caption_is_persisted_with_the_image(tmp_path):
+    q = ImageQueue(tmp_path)
+    q.add(A, b"1", 60, now=0, caption="Bonne année")
+    assert ImageQueue(tmp_path).items()[0].caption == "Bonne année"
+
+
+def test_metadata_written_before_captions_existed_still_loads(tmp_path):
+    import json
+    (tmp_path / f"{A}.json").write_text(json.dumps({"id": A, "duration": 60, "received_at": 0}))
+    assert ImageQueue(tmp_path).items()[0].caption == ""

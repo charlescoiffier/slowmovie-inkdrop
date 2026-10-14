@@ -14,6 +14,7 @@ from PIL import Image
 
 from .config import Settings
 from .image_queue import ImageQueue
+from .imaging import clean_caption
 
 log = logging.getLogger(__name__)
 
@@ -133,7 +134,8 @@ def sync_cycle(client: RelayClient, queue: ImageQueue, outbox: AckOutbox, settin
                 client.ack(image_id, "failed")
                 continue
             try:
-                queue.add(image_id, data, duration, now)
+                caption = clean_caption(str(item.get("caption") or ""), settings.caption_max_chars)
+                queue.add(image_id, data, duration, now, caption=caption)
             except ValueError:
                 log.warning("identifiant refusé par le Pi : %r", image_id)
                 continue

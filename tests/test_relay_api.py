@@ -44,7 +44,8 @@ def send(client, *, password=PASSWORD, duration="300", data=None, name="p.png", 
 def test_page_and_config(env):
     client, *_ = env
     assert client.get("/").status_code == 200 and "<form" in client.get("/").text
-    assert client.get("/api/config").json() == {"min_duration": 60, "max_duration": 3600, "max_mb": 10}
+    assert client.get("/api/config").json() == {"min_duration": 60, "max_duration": 3600, "max_mb": 10,
+                                                "caption_max": 128}
 
 
 def test_upload_ok_returns_position_and_eta(env):
@@ -131,7 +132,7 @@ def test_device_flow_pending_fetch_ack(env):
     client, *_ = env
     image_id = send(client, duration="120").json()["id"]
     pending = client.get("/api/device/pending", headers=DEVICE).json()
-    assert pending == [{"id": image_id, "duration": 120}]
+    assert pending == [{"id": image_id, "duration": 120, "caption": ""}]
     data = client.get(f"/api/device/image/{image_id}", headers=DEVICE)
     assert data.status_code == 200 and data.content[:4] == b"\x89PNG"
     assert client.get("/api/device/pending", headers=DEVICE).json() == []   # déjà récupérée
@@ -188,3 +189,49 @@ def test_fetched_but_unacked_item_is_offered_again_after_the_lease(env):
     clock.t += config.lease_seconds + 1                                       # la réponse s'est perdue
     assert [i["id"] for i in client.get("/api/device/pending", headers=DEVICE).json()] == [image_id]
     assert client.get(f"/api/device/image/{image_id}", headers=DEVICE).status_code == 200
+
+
+def _send_caption(client, caption):
+    return client.post("/api/send", data={"password": PASSWORD, "duration": "300", "caption": caption},
+                       files={"image": ("p.png", png(), "image/png")})
+
+
+def test_caption_is_stored_cleaned_and_offered_to_the_device(env):
+    client, *_ = env
+    r = _send_caption(client, "  Joyeux\nanniversaire\x00 Zoé !  ")
+    assert r.status_code == 202
+    pending = client.get("/api/device/pending", headers=DEVICE).json()
+    assert pending[0]["caption"] == "Joyeux anniversaire Zoé !"
+
+
+def test_caption_of_exactly_the_maximum_is_accepted_and_one_more_is_refused(env):
+    client, *_ = env
+    assert _send_caption(client, "é" * 128).status_code == 202
+    r = _send_caption(client, "é" * 129)
+    assert r.status_code == 422 and "128" in r.json()["detail"]
+
+
+def test_caption_limit_is_configurable(tmp_path):
+    config = RelayConfig(data_dir=tmp_path / "c", password_hash=hash_password(PASSWORD),
+                         device_token=TOKEN, caption_max=10)
+    client = TestClient(create_app(config))
+    assert client.get("/api/config").json()["caption_max"] == 10
+    assert _send_caption(client, "x" * 11).status_code == 422
+
+
+def test_caption_is_optional(env):
+    client, *_ = env
+    assert send(client).status_code == 202
+    assert client.get("/api/device/pending", headers=DEVICE).json()[0]["caption"] == ""
+
+
+def test_caption_of_only_invisible_characters_counts_as_empty(env):
+    client, *_ = env
+    assert _send_caption(client, "\u200b\u202e \n").status_code == 202
+    assert client.get("/api/device/pending", headers=DEVICE).json()[0]["caption"] == ""
+
+
+def test_upload_page_has_the_caption_field(env):
+    client, *_ = env
+    html = client.get("/").text
+    assert 'name="caption"' in html and "maxlength" in html

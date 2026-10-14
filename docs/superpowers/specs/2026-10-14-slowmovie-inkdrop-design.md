@@ -62,6 +62,14 @@ Communication TUI ↔ lecteur : le lecteur écrit atomiquement un `state.json` (
 
 **Image** : le relais valide et réencode ; le Pi fait la conversion finale pour son écran (dimensions, orientation, niveaux de gris ou tramage). Écran actuel supposé : `waveshare_epd.epd7in5_V2`.
 
+### 5 bis. Texte sous l'image
+
+Un envoi peut porter un **texte** (facultatif, 128 caractères au plus, réglable côté relais par `SLOWMOVIE_RELAY_CAPTION_MAX`).
+Le relais le nettoie (une ligne, sans caractère de contrôle ni invisible) et refuse un texte trop long (422). Le Pi le
+nettoie à nouveau et le tronque à `caption-max-chars`, sans faire confiance au relais. Le Pi le dessine juste avant
+l'affichage : blanc cerclé de noir, centré en bas, 1 à 3 lignes, police système avec accents (DejaVu) ou, à défaut,
+accents retirés. Sans texte, l'image est affichée comme avant. La TUI montre le texte dans l'onglet File.
+
 ## 6. Relais
 
 Python, derrière le reverse proxy déjà utilisé pour cadav (à confirmer en lisant `vps-infra`), sur un sous-domaine du type `slowmovie.charlescoiffier.fr`.

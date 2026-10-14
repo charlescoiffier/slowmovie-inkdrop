@@ -5,7 +5,7 @@ TARGET=/home/admin/SlowMovie
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
 sudo apt-get update
-sudo apt-get install -y ffmpeg samba avahi-daemon rsync python3-venv python3-dev libopenjp2-7
+sudo apt-get install -y ffmpeg samba avahi-daemon rsync python3-venv python3-dev libopenjp2-7 fonts-dejavu-core
 
 mkdir -p "$TARGET/Videos"
 python3 -m venv "$TARGET/.venv"

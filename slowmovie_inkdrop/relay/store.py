@@ -19,20 +19,22 @@ class Store:
         with self._lock:
             self._db.execute("CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, "
                              "status TEXT NOT NULL, duration INTEGER NOT NULL, created_at REAL NOT NULL, "
-                             "fetched_at REAL)")
+                             "fetched_at REAL, caption TEXT NOT NULL DEFAULT '')")
             columns = [r["name"] for r in self._db.execute("PRAGMA table_info(items)")]
             if "fetched_at" not in columns:               # base créée avant l'ajout du bail
                 self._db.execute("ALTER TABLE items ADD COLUMN fetched_at REAL")
+            if "caption" not in columns:                  # base créée avant l'ajout du texte
+                self._db.execute("ALTER TABLE items ADD COLUMN caption TEXT NOT NULL DEFAULT ''")
             self._db.commit()
 
     def image_path(self, image_id: str) -> Path:
         return self.images / f"{image_id}.png"
 
-    def add(self, image_id: str, duration: int, png: bytes, now: float) -> None:
+    def add(self, image_id: str, duration: int, png: bytes, now: float, caption: str = "") -> None:
         self.image_path(image_id).write_bytes(png)
         with self._lock:
-            self._db.execute("INSERT INTO items (id, status, duration, created_at) "
-                             "VALUES (?, 'queued', ?, ?)", (image_id, duration, now))
+            self._db.execute("INSERT INTO items (id, status, duration, created_at, caption) "
+                             "VALUES (?, 'queued', ?, ?, ?)", (image_id, duration, now, caption))
             self._db.commit()
 
     def active_count(self) -> int:

@@ -7,7 +7,7 @@ name = "slowmovie-inkdrop"
 version = "0.1.0"
 description = "SlowMovie avec envoi d'images à distance, TUI et ajout de films simplifié"
 requires-python = ">=3.11"
-dependencies = ["Pillow>=10", "httpx>=0.27"]
+dependencies = ["Pillow>=10.1", "httpx>=0.27"]
 
 [project.optional-dependencies]
 video = ["ffmpeg-python>=0.2"]

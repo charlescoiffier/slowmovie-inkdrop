@@ -1,9 +1,12 @@
 """Traitement des images : validation côté relais, mise en forme côté écran."""
 from __future__ import annotations
 
+import functools
 import io
+import os
+import unicodedata
 
-from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps, UnidentifiedImageError
 
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "MPO"}   # MPO : JPEG multi-images des téléphones
 
@@ -57,3 +60,107 @@ def to_panel(img: Image.Image, size: tuple[int, int], *, contrast: float = 1.0) 
     if contrast != 1.0:
         img = ImageEnhance.Contrast(img).enhance(contrast)
     return img
+
+
+def clean_caption(text: str, max_chars: int) -> str:
+    """Texte affichable : une ligne, sans caractère de contrôle ni invisible, tronqué à `max_chars`."""
+    kept = []
+    for char in text:
+        if char in "\r\n\t":
+            kept.append(" ")
+        elif unicodedata.category(char).startswith(("C", "Z")) and char != " ":
+            continue                    # contrôle, invisible, inversion de sens d'écriture, séparateurs
+        else:
+            kept.append(char)
+    return " ".join("".join(kept).split())[:max_chars]
+
+
+def _wrap(draw: ImageDraw.ImageDraw, text: str, font, max_width: float) -> list[str]:
+    lines: list[str] = []
+    current = ""
+    for word in text.split(" "):
+        candidate = word if not current else f"{current} {word}"
+        if draw.textlength(candidate, font=font) <= max_width:
+            current = candidate
+            continue
+        if current:
+            lines.append(current)
+            current = ""
+        while draw.textlength(word, font=font) > max_width:     # mot plus large que l'écran
+            cut = len(word)
+            while cut > 1 and draw.textlength(word[:cut], font=font) > max_width:
+                cut -= 1
+            lines.append(word[:cut])
+            word = word[cut:]
+        current = word
+    if current:
+        lines.append(current)
+    return lines
+
+
+# Polices grasses avec accents, par ordre de préférence. `fonts-dejavu-core` est installé par deploy/install-pi.sh.
+FONT_CANDIDATES = (
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",       # Mac, pour le développement
+    "/Library/Fonts/Arial Bold.ttf",
+)
+
+
+@functools.lru_cache(maxsize=None)
+def find_caption_font(size: int):
+    """Police du texte : `SLOWMOVIE_FONT`, sinon une police système avec accents, sinon celle de Pillow."""
+    forced = os.environ.get("SLOWMOVIE_FONT")
+    for path in ([forced] if forced else []) + list(FONT_CANDIDATES):
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return ImageFont.load_default(size)
+
+
+def _has_glyph(font, char: str) -> bool:
+    def render(c: str) -> bytes:
+        im = Image.new("L", (80, 80))
+        ImageDraw.Draw(im).text((10, 10), c, font=font, fill=255)
+        return im.tobytes()
+
+    return render(char) != render("\U0010FFFF")             # différent du carré « glyphe absent »
+
+
+def _drawable(text: str, font) -> str:
+    """Remplace ce que la police ne sait pas dessiner : sans accent, sinon « ? » (jamais de carré)."""
+    out = []
+    for char in text:
+        if ord(char) < 128 or _has_glyph(font, char):
+            out.append(char)
+            continue
+        base = unicodedata.normalize("NFKD", char).encode("ascii", "ignore").decode()
+        out.append(base or "?")
+    return "".join(out)
+
+
+def draw_caption(img: Image.Image, text: str, *, margin: int = 12, max_lines: int = 3) -> Image.Image:
+    """Dessine `text` en blanc cerclé de noir, centré en bas de l'image (copie ; l'original est intact)."""
+    text = text.strip()
+    if not text:
+        return img
+    out = img.convert("RGB").copy()
+    width, height = out.size
+    draw = ImageDraw.Draw(out)
+    for size in range(32, 13, -2):                     # plus petit si le texte ne tient pas
+        font = find_caption_font(size)
+        lines = _wrap(draw, _drawable(text, font), font, width - 2 * margin)
+        if len(lines) <= max_lines:
+            break
+    lines = lines[:max_lines]
+    stroke = max(1, size // 10)
+    ascent, descent = font.getmetrics()
+    pitch = ascent + descent + stroke
+    y = height - margin - pitch * len(lines)
+    for line in lines:
+        x = (width - draw.textlength(line, font=font)) / 2
+        draw.text((x, y), line, font=font, fill="white", stroke_width=stroke, stroke_fill="black")
+        y += pitch
+    return out

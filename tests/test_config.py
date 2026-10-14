@@ -18,6 +18,7 @@ def test_defaults_match_upstream():
     assert s.min_image_seconds == 60 and s.max_image_seconds == 3600
     assert s.queue_max == 10 and s.queue_expiry_seconds == 21600
     assert s.active_hours == ""
+    assert s.caption_max_chars == 128
 
 
 def test_load_reads_upstream_style_conf(tmp_path):
@@ -85,3 +86,9 @@ def test_paths_ensure(tmp_path):
 
 def test_videos_dir_absolute(tmp_path):
     assert Paths(tmp_path).videos_dir(Settings(directory="/mnt/films")).as_posix() == "/mnt/films"
+
+
+@pytest.mark.parametrize("value", [0, -1, 501])
+def test_caption_max_chars_out_of_range_is_refused(tmp_path, value):
+    with pytest.raises(ConfigError):
+        Settings(caption_max_chars=value).save(tmp_path / "x.conf")

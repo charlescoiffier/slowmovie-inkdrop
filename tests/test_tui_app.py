@@ -7,7 +7,7 @@ from slowmovie_inkdrop.tui import app as tui_app
 from slowmovie_inkdrop.tui.app import SlowMovieApp
 
 STATE = {"mode": "FILM", "paused": False, "video": "metropolis.mp4", "percent": 42.0,
-         "remaining_seconds": 7200, "queue": [{"id": "a" * 32, "duration": 120}], "error": "",
+         "remaining_seconds": 7200, "queue": [{"id": "a" * 32, "duration": 120, "caption": "Joyeux anniversaire"}], "error": "",
          "relay_status": "ok (0 nouvelle(s) image(s))", "frame": 10, "frame_count": 100,
          "updated_at": 1.0, "image_until": 0}
 
@@ -136,3 +136,11 @@ async def test_commands_wait_long_enough_for_an_epaper_refresh(paths, monkeypatc
     async with SlowMovieApp(paths).run_test() as pilot:
         await pilot.press("space")
     assert seen and seen[0] >= 20
+
+
+async def test_queue_tab_shows_the_caption_of_each_image(paths, sent):
+    async with SlowMovieApp(paths).run_test() as pilot:
+        await pilot.press("3")
+        await pilot.pause()
+        row = pilot.app.query_one("#queue-table").get_row_at(0)
+        assert "Joyeux anniversaire" in row

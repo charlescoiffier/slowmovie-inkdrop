@@ -16,6 +16,7 @@ class RelayConfig:
     expiry_seconds: int = 21600
     max_upload_bytes: int = 10 * 1024 * 1024
     trust_proxy: bool = False
+    caption_max: int = 128       # longueur maximale du texte affiché sous l'image
     lease_seconds: int = 120     # une image « récupérée » mais sans accusé est reproposée après ce délai
 
     @classmethod
@@ -32,5 +33,6 @@ class RelayConfig:
             max_duration=int(env.get("SLOWMOVIE_RELAY_MAX_DURATION", 3600)),
             queue_max=int(env.get("SLOWMOVIE_RELAY_QUEUE_MAX", 10)),
             expiry_seconds=int(env.get("SLOWMOVIE_RELAY_EXPIRY", 21600)),
+            caption_max=int(env.get("SLOWMOVIE_RELAY_CAPTION_MAX", 128)),
             trust_proxy=env.get("SLOWMOVIE_RELAY_TRUST_PROXY", "") == "1",
         )

@@ -21,6 +21,7 @@ class QueuedImage:
     path: Path
     duration: int
     received_at: float
+    caption: str = ""
 
 
 class ImageQueue:
@@ -42,7 +43,8 @@ class ImageQueue:
                 if not _ID.fullmatch(image_id):
                     raise ValueError(image_id)
                 found.append(QueuedImage(image_id, self.directory / f"{image_id}.png",
-                                         int(data["duration"]), float(data["received_at"])))
+                                         int(data["duration"]), float(data["received_at"]),
+                                         str(data.get("caption", ""))))
             except (OSError, ValueError, KeyError, TypeError):
                 continue
         return sorted(found, key=lambda i: i.received_at)
@@ -60,7 +62,8 @@ class ImageQueue:
         return image_id in self._seen() or any(i.id == image_id for i in self.items())
 
     # -- écriture --------------------------------------------------------
-    def add(self, image_id: str, data: bytes, duration: int, now: float) -> QueuedImage:
+    def add(self, image_id: str, data: bytes, duration: int, now: float,
+            caption: str = "") -> QueuedImage:
         if not _ID.fullmatch(image_id):
             raise ValueError(f"identifiant d'image invalide : {image_id!r}")
         if len(self) >= self.max_items:
@@ -69,9 +72,10 @@ class ImageQueue:
         path.write_bytes(data)
         meta = self.directory / f"{image_id}.json"
         tmp = meta.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"id": image_id, "duration": int(duration), "received_at": now}))
+        tmp.write_text(json.dumps({"id": image_id, "duration": int(duration), "received_at": now,
+                                   "caption": caption}))
         os.replace(tmp, meta)  # le .json en dernier : une écriture partielle reste invisible
-        return QueuedImage(image_id, path, int(duration), now)
+        return QueuedImage(image_id, path, int(duration), now, caption)
 
     def peek(self, now: float) -> QueuedImage | None:
         for item in self.items():

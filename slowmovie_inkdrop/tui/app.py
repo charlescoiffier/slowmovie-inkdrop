@@ -86,7 +86,7 @@ class SlowMovieApp(App):
         self.register_theme(GALAXY)
         self.theme = "galaxy"
         self.query_one("#films-table", DataTable).add_columns("Film", "État", "Progression")
-        self.query_one("#queue-table", DataTable).add_columns("Image", "Durée")
+        self.query_one("#queue-table", DataTable).add_columns("Image", "Durée", "Texte")
         self.query_one("#settings-table", DataTable).add_columns("Réglage", "Valeur")
         self.set_interval(2.0, self.refresh_data)
         self.refresh_data()
@@ -101,7 +101,7 @@ class SlowMovieApp(App):
                          f"{r['percent']} %" if r["percent"] is not None else r["error"]))
             for r in model.film_rows(self.paths)])
         self._fill("#queue-table", [
-            (i["id"], (i["id"][:8], f"{i['duration'] // 60} min"))
+            (i["id"], (i["id"][:8], f"{i['duration'] // 60} min", i.get("caption", "")))
             for i in (self.state or {}).get("queue", [])])
         settings = Settings.load(self.paths.conf)
         self._fill("#settings-table", [

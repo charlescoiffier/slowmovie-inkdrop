@@ -8,6 +8,7 @@ Raspberry Pi) avec trois apports :
 1. **Envoi d'images à distance** : depuis un téléphone ou un ordinateur, on envoie une image et une durée. Elle remplace
    le film à l'écran pendant ce temps (le film est en pause), puis le film reprend là où il s'était arrêté. Les envois
    forment une file d'attente, protégée par un mot de passe partagé.
+   Un **texte** de 128 caractères au plus peut accompagner l'image : il s'affiche en blanc cerclé de noir, centré en bas.
 2. **Interface terminal** (TUI Textual, au clavier, thème « galaxy » comme [cadav](https://github.com/charlescoiffier/cadav)).
 3. **Ajout de films simplifié** : glisser-déposer dans un partage réseau, ou `slowmovie add film.mp4`.
 
@@ -39,5 +40,5 @@ Les tests utilisent un écran factice (`SLOWMOVIE_FAKE_DISPLAY=<dossier>` pour l
 
 - `legacy/` : les trois scripts d'origine (`slowmovie.py`, `slowmovie_config.py`, `slowmovie_plus.py`), pour référence.
 - Spécification et plan : `docs/superpowers/`.
-- **Licence** : `legacy/slowmovie.py` et `framesource.py` dérivent de SlowMovie de Tom Whitwell ; la licence de ce dépôt
-  reste à fixer après vérification de celle de l'amont.
+- **Licence** : le code repris de SlowMovie (Tom Whitwell, licence MIT) est signalé dans [NOTICE.md](NOTICE.md), avec sa
+  mention de licence. La licence propre à ce dépôt n'est pas encore choisie.

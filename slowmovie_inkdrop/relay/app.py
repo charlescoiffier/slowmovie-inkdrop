@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
-from ..imaging import InvalidImage, sanitize_upload
+from ..imaging import InvalidImage, clean_caption, sanitize_upload
 from .config import RelayConfig
 from .security import RateLimiter, verify_password
 from .store import Store
@@ -66,11 +66,11 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
     @app.get("/api/config")
     def public_config() -> dict:
         return {"min_duration": config.min_duration, "max_duration": config.max_duration,
-                "max_mb": config.max_upload_bytes // (1024 * 1024)}
+                "max_mb": config.max_upload_bytes // (1024 * 1024), "caption_max": config.caption_max}
 
     @app.post("/api/send", status_code=202)
     def send(request: Request, password: str = Form(default=""), duration: str = Form(default=""),
-             image: UploadFile = File(...)) -> JSONResponse:
+             caption: str = Form(default=""), image: UploadFile = File(...)) -> JSONResponse:
         ip = client_ip(request)
         wait = limiter.blocked(ip)
         if wait > 0:
@@ -89,6 +89,9 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
         if not config.min_duration <= seconds <= config.max_duration:
             raise HTTPException(422, f"Durée invalide : entre {config.min_duration} et "
                                      f"{config.max_duration} secondes.")
+        text_caption = clean_caption(caption, 10_000)
+        if len(text_caption) > config.caption_max:
+            raise HTTPException(422, f"Texte trop long : {config.caption_max} caractères au maximum.")
         store.purge(clock(), config.expiry_seconds)
         if store.active_count() >= config.queue_max:
             raise HTTPException(409, "La file d'attente est pleine. Réessayez dans quelques minutes.")
@@ -98,7 +101,7 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
         except InvalidImage as exc:
             raise HTTPException(_STATUS_FOR_CODE.get(exc.code, 422), exc.message) from None
         image_id = uuid.uuid4().hex
-        store.add(image_id, seconds, png, clock())
+        store.add(image_id, seconds, png, clock(), text_caption)
         position, eta = store.position_and_eta(image_id)
         return JSONResponse({"id": image_id, "position": position, "eta_seconds": eta}, status_code=202)
 
@@ -114,7 +117,7 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
     def pending() -> list[dict]:
         store.purge(clock(), config.expiry_seconds)
         offered = store.offerable(clock(), config.lease_seconds)
-        return [{"id": i["id"], "duration": i["duration"]} for i in offered]
+        return [{"id": i["id"], "duration": i["duration"], "caption": i["caption"]} for i in offered]
 
     @app.get("/api/device/image/{image_id}", dependencies=[Depends(require_device)])
     def device_image(image_id: str) -> Response:

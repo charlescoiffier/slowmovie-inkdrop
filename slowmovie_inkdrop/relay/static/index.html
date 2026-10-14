@@ -16,6 +16,7 @@
   button { background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:600; margin-top:1.4rem; cursor:pointer; }
   button:disabled { opacity:.5; cursor:default; }
   #preview { display:none; width:100%; max-height:14rem; object-fit:contain; margin-top:.8rem; border:1px solid var(--line); border-radius:8px; }
+  .hint { color:var(--muted); font-weight:400; font-size:.85rem; }
   #msg { margin-top:1.2rem; min-height:1.5rem; } .err { color:var(--err); } .ok { color:var(--ok); }
   .remember { display:flex; gap:.5rem; align-items:center; margin-top:.7rem; font-weight:400; } .remember input { width:auto; }
 </style>
@@ -30,6 +31,9 @@
     <img id="preview" alt="Aperçu">
     <label for="duration">Durée d'affichage</label>
     <select id="duration" name="duration"></select>
+    <label for="caption">Texte sous l'image <span class="hint">(facultatif)</span></label>
+    <input id="caption" name="caption" type="text" maxlength="128" autocomplete="off">
+    <div id="count" class="hint" aria-live="polite"></div>
     <label for="password">Mot de passe</label>
     <input id="password" name="password" type="password" autocomplete="current-password" required>
     <label class="remember"><input id="remember" type="checkbox"> Se souvenir sur cet appareil</label>
@@ -50,9 +54,15 @@ function hhmm(seconds) {
 }
 fetch("/api/config").then((r) => r.json()).then((c) => {
   for (const [s, label] of PRESETS) if (s >= c.min_duration && s <= c.max_duration) $("duration").add(new Option(label, s));
+  if (c.caption_max) { $("caption").maxLength = c.caption_max; countCaption(); }
 }).catch(() => PRESETS.forEach(([s, l]) => $("duration").add(new Option(l, s))));
 const saved = stored("sm-password");
 if (saved) { $("password").value = saved; $("remember").checked = true; }
+function countCaption() {
+  const max = $("caption").maxLength, n = [...$("caption").value].length;
+  $("count").textContent = n ? `${n} / ${max}` : "";
+}
+$("caption").addEventListener("input", countCaption);
 $("image").addEventListener("change", () => {
   const f = $("image").files[0];
   if (f) { $("preview").src = URL.createObjectURL(f); $("preview").style.display = "block"; }

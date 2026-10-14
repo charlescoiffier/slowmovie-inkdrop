@@ -19,7 +19,7 @@ from PIL import Image
 from .config import Paths, Settings, in_active_hours
 from .display import Display
 from .image_queue import ImageQueue, QueuedImage
-from .imaging import to_panel
+from .imaging import clean_caption, draw_caption, to_panel
 from .videos import VideoInfo, next_video, probe_video, read_progress, write_progress
 
 log = logging.getLogger(__name__)
@@ -125,6 +125,7 @@ class Player:
             with Image.open(item.path) as raw:
                 raw.load()
                 panel = to_panel(raw, (self.display.width, self.display.height), contrast=s.contrast)
+            panel = draw_caption(panel, clean_caption(item.caption, s.caption_max_chars))
         except Exception as exc:  # noqa: BLE001 - bombe de décompression, mémoire... : l'image est écartée
             log.warning("image %s illisible : %s", item.id, exc)
             self.error = f"Image reçue illisible ({item.id[:8]})"
@@ -314,7 +315,8 @@ class Player:
             "percent": percent, "remaining_seconds": remaining,
             "next_frame_at": self.next_frame_at, "image_until": self.image_until,
             "active": self._active(now),
-            "queue": [{"id": i.id, "duration": i.duration} for i in self.queue.items()],
+            "queue": [{"id": i.id, "duration": i.duration, "caption": i.caption}
+                      for i in self.queue.items()],
             "error": self.error, "relay_status": self.relay_status,
             "delay": s.delay, "increment": s.increment, "updated_at": now,
         }
