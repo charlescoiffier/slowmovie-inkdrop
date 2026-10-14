@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.egg-info/
+.DS_Store
+.pytest_cache/
+.ruff_cache/
+.superpowers/
+Videos/
+progress/
+nowPlaying
+*.log
+state.json
+library.json
+queue/
+run/
+slowmovie.conf
+relay-data/
