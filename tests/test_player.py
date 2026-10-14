@@ -235,3 +235,12 @@ def test_state_snapshot_fields(make_player):
     for key in ("paused", "video", "frame", "frame_count", "percent", "remaining_seconds",
                 "next_frame_at", "image_until", "active", "error", "relay_status", "updated_at"):
         assert key in state
+
+
+def test_video_appearing_after_start_is_picked_up_within_seconds(make_player):
+    ctx = make_player(videos=())
+    ctx.player.tick()
+    ctx.library.videos = [ctx.paths.videos_dir(ctx.player.settings) / "a.mp4"]
+    ctx.clock.advance(6)
+    ctx.player.tick()
+    assert ctx.frames.calls == [("a.mp4", 0)]

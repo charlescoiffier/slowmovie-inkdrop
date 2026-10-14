@@ -186,7 +186,7 @@ class Player:
         if not videos:
             self.video = self.info = None
             self.error = "Aucun film prêt dans le dossier des films."
-            self.next_frame_at = now + IDLE_TICK
+            self.next_frame_at = now + TICK_MAX      # un film en cours de copie sera repris vite
             self._write_state(now)
             return
         if self.video is None or self.video not in videos:
