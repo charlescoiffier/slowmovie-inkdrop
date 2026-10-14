@@ -14,6 +14,7 @@ from .framesource import FfmpegFrameSource
 from .image_queue import ImageQueue
 from .library import Library
 from .player import Player
+from .relayclient import AckOutbox, relay_loop
 from .videos import probe_video
 
 log = logging.getLogger("slowmovie")
@@ -46,16 +47,10 @@ def run(base: Path) -> int:
     library = Library(paths.videos_dir(settings), paths.library, probe_video)
     library.poll(time.time())
     queue = ImageQueue(paths.queue_dir, settings.queue_max, settings.queue_expiry_seconds)
-    outbox_hook = None
-    outbox = None
-    try:
-        from .relayclient import AckOutbox
-        outbox = AckOutbox(paths.acks)
-        outbox_hook = lambda item, status: outbox.add(item.id, status)  # noqa: E731
-    except ImportError:  # relayclient arrive à la tâche 10
-        pass
+    outbox = AckOutbox(paths.acks)
     player = Player(paths=paths, settings=settings, display=display, frames=FfmpegFrameSource(),
-                    image_queue=queue, library=library, on_done=outbox_hook)
+                    image_queue=queue, library=library,
+                    on_done=lambda item, status: outbox.add(item.id, status))
     stop = threading.Event()
 
     def shutdown(signum, frame) -> None:
@@ -68,10 +63,8 @@ def run(base: Path) -> int:
     control = ControlServer(player, paths.socket)
     control.start()
     threading.Thread(target=_library_loop, args=(library, stop), daemon=True).start()
-    if outbox is not None:
-        from .relayclient import relay_loop
-        threading.Thread(target=relay_loop, args=(player, queue, outbox, stop, time.time),
-                         daemon=True).start()
+    threading.Thread(target=relay_loop, args=(player, queue, outbox, stop, time.time),
+                     daemon=True).start()
     log.info("slowmovie démarré (%s)", base)
     try:
         player.run_forever(stop)
