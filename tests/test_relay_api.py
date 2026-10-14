@@ -170,3 +170,11 @@ def test_unacked_items_expire_and_free_the_queue(env):
     clock.t += config.expiry_seconds + 1
     client.get("/api/device/pending", headers=DEVICE)               # déclenche le nettoyage
     assert client.get(f"/api/status/{image_id}").json()["status"] == "expired"
+
+
+def test_upload_without_content_length_is_refused(env):
+    client, *_ = env
+    r = client.post("/api/send", content=iter([b"--x\r\n", b"--x--\r\n"]),
+                    headers={"content-type": "multipart/form-data; boundary=x",
+                             "transfer-encoding": "chunked"})
+    assert r.status_code == 411

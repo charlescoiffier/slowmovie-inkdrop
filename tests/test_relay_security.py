@@ -52,3 +52,10 @@ def test_send_window():
     assert not limiter.allow_send("ip")
     clock.t = 101
     assert limiter.allow_send("ip")
+
+
+def test_hash_is_safe_in_env_files():
+    # '$' est interpolé par docker compose dans un fichier .env : le haché ne doit pas en contenir
+    stored = hash_password("x")
+    assert "$" not in stored and " " not in stored and "'" not in stored
+    assert verify_password("x", stored)

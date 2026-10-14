@@ -1,0 +1,15 @@
+[Unit]
+Description=SlowMovie-Inkdrop
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=admin
+Environment=SLOWMOVIE_HOME=/home/admin/SlowMovie
+WorkingDirectory=/home/admin/SlowMovie
+ExecStart=/home/admin/SlowMovie/.venv/bin/slowmovie run
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

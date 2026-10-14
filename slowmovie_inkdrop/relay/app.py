@@ -36,6 +36,8 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
     @app.middleware("http")
     async def reject_huge_bodies(request: Request, call_next):
         length = request.headers.get("content-length")
+        if request.method == "POST" and request.url.path == "/api/send" and not length:
+            return JSONResponse({"detail": "Taille de l'envoi manquante."}, status_code=411)
         if length and length.isdigit() and int(length) > config.max_upload_bytes + 65536:
             return JSONResponse({"detail": "Image trop lourde."}, status_code=413)
         return await call_next(request)
