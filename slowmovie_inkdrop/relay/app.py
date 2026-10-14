@@ -113,7 +113,8 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
     @app.get("/api/device/pending", dependencies=[Depends(require_device)])
     def pending() -> list[dict]:
         store.purge(clock(), config.expiry_seconds)
-        return [{"id": i["id"], "duration": i["duration"]} for i in store.queued()]
+        offered = store.offerable(clock(), config.lease_seconds)
+        return [{"id": i["id"], "duration": i["duration"]} for i in offered]
 
     @app.get("/api/device/image/{image_id}", dependencies=[Depends(require_device)])
     def device_image(image_id: str) -> Response:
@@ -121,7 +122,7 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
         path = store.image_path(image_id)
         if item is None or item["status"] not in ("queued", "fetched") or not path.exists():
             raise HTTPException(404, "Image indisponible.")
-        store.set_status(image_id, "fetched")
+        store.mark_fetched(image_id, clock())
         return FileResponse(path, media_type="image/png")
 
     @app.post("/api/device/ack/{image_id}", dependencies=[Depends(require_device)])

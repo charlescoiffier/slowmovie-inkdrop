@@ -54,3 +54,17 @@ def test_garbage_request_gets_error_reply(sock_path):
 def test_service_not_running(sock_path):
     with pytest.raises(ServiceNotRunning):
         send_command(sock_path, {"cmd": "pause"})
+
+
+def test_busy_player_gets_a_clear_message_not_an_empty_error(sock_path):
+    class BusyPlayer:
+        def submit(self, cmd):
+            return Future()                  # jamais résolu : le lecteur est en plein rafraîchissement
+
+    server = ControlServer(BusyPlayer(), sock_path, reply_timeout=0.2)
+    server.start()
+    try:
+        reply = send_command(sock_path, {"cmd": "pause"})
+    finally:
+        server.stop()
+    assert reply["ok"] is False and "occupé" in reply["error"]

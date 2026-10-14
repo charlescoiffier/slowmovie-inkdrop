@@ -244,3 +244,21 @@ def test_video_appearing_after_start_is_picked_up_within_seconds(make_player):
     ctx.clock.advance(6)
     ctx.player.tick()
     assert ctx.frames.calls == [("a.mp4", 0)]
+
+
+def test_image_that_explodes_while_decoding_is_dropped_not_retried_forever(make_player, monkeypatch):
+    from PIL import Image
+
+    from slowmovie_inkdrop import player as player_module
+
+    def bomb(*args, **kwargs):
+        raise Image.DecompressionBombError("trop de pixels")
+
+    monkeypatch.setattr(player_module, "to_panel", bomb)
+    ctx = make_player()
+    ctx.queue.add(A, png_bytes(), 60, ctx.clock())
+    ctx.player.tick()
+    assert ctx.done == [(A, "failed")] and len(ctx.queue) == 0
+    ctx.clock.advance(11)
+    ctx.player.tick()
+    assert ctx.frames.calls == [("a.mp4", 0)]           # le film revient

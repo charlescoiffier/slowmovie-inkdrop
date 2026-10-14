@@ -98,7 +98,7 @@ Variables facultatives : `SLOWMOVIE_HOST` (défaut `slowmovie.local`), `SLOWMOVI
 À faire une fois le Pi joignable et le relais déployé ; cocher seulement ce qui a été observé.
 
 - [ ] `ssh admin@slowmovie.local 'systemctl is-active slowmovie && slowmovie status'` : service actif, film et progression repris.
-- [ ] `slowmovie add ~/Movies/un-film.mp4` : le film passe « prêt » dans l'onglet Films en moins de 30 s.
+- [ ] `slowmovie add ~/Movies/un-film.mp4` : le film passe « prêt » dans l'onglet Films en moins d'une minute (délai de stabilisation de 30 s).
 - [ ] Glisser un film dans `smb://slowmovie.local/SlowMovie` : « copie en cours… » puis « prêt », jamais joué à moitié.
 - [ ] Depuis un téléphone en 4G, envoyer une photo prise en portrait (1 minute) : elle s'affiche bien orientée, puis le film reprend à la même image.
 - [ ] Envoyer deux images depuis deux appareils : affichées dans l'ordre, le film reprend après la seconde.

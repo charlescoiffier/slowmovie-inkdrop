@@ -178,3 +178,13 @@ def test_upload_without_content_length_is_refused(env):
                     headers={"content-type": "multipart/form-data; boundary=x",
                              "transfer-encoding": "chunked"})
     assert r.status_code == 411
+
+
+def test_fetched_but_unacked_item_is_offered_again_after_the_lease(env):
+    client, clock, config = env
+    image_id = send(client).json()["id"]
+    assert client.get(f"/api/device/image/{image_id}", headers=DEVICE).status_code == 200
+    assert client.get("/api/device/pending", headers=DEVICE).json() == []     # bail en cours
+    clock.t += config.lease_seconds + 1                                       # la réponse s'est perdue
+    assert [i["id"] for i in client.get("/api/device/pending", headers=DEVICE).json()] == [image_id]
+    assert client.get(f"/api/device/image/{image_id}", headers=DEVICE).status_code == 200

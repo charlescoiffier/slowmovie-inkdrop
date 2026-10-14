@@ -18,7 +18,11 @@ class Store:
         self._lock = threading.Lock()
         with self._lock:
             self._db.execute("CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, "
-                             "status TEXT NOT NULL, duration INTEGER NOT NULL, created_at REAL NOT NULL)")
+                             "status TEXT NOT NULL, duration INTEGER NOT NULL, created_at REAL NOT NULL, "
+                             "fetched_at REAL)")
+            columns = [r["name"] for r in self._db.execute("PRAGMA table_info(items)")]
+            if "fetched_at" not in columns:               # base créée avant l'ajout du bail
+                self._db.execute("ALTER TABLE items ADD COLUMN fetched_at REAL")
             self._db.commit()
 
     def image_path(self, image_id: str) -> Path:
@@ -27,7 +31,8 @@ class Store:
     def add(self, image_id: str, duration: int, png: bytes, now: float) -> None:
         self.image_path(image_id).write_bytes(png)
         with self._lock:
-            self._db.execute("INSERT INTO items VALUES (?, 'queued', ?, ?)", (image_id, duration, now))
+            self._db.execute("INSERT INTO items (id, status, duration, created_at) "
+                             "VALUES (?, 'queued', ?, ?)", (image_id, duration, now))
             self._db.commit()
 
     def active_count(self) -> int:
@@ -40,11 +45,20 @@ class Store:
             row = self._db.execute("SELECT * FROM items WHERE id = ?", (image_id,)).fetchone()
         return dict(row) if row else None
 
-    def queued(self) -> list[dict]:
+    def offerable(self, now: float, lease: float) -> list[dict]:
+        """Images à proposer au Pi : en attente, ou récupérées depuis plus longtemps que le bail."""
         with self._lock:
-            rows = self._db.execute("SELECT * FROM items WHERE status = 'queued' ORDER BY created_at"
-                                    ).fetchall()
+            rows = self._db.execute(
+                "SELECT * FROM items WHERE status = 'queued' OR "
+                "(status = 'fetched' AND COALESCE(fetched_at, 0) < ?) ORDER BY created_at",
+                (now - lease,)).fetchall()
         return [dict(r) for r in rows]
+
+    def mark_fetched(self, image_id: str, now: float) -> None:
+        with self._lock:
+            self._db.execute("UPDATE items SET status = 'fetched', fetched_at = ? WHERE id = ?",
+                             (now, image_id))
+            self._db.commit()
 
     def set_status(self, image_id: str, status: str) -> None:
         with self._lock:

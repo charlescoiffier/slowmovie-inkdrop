@@ -123,7 +123,7 @@ class SlowMovieApp(App):
     # -- actions ---------------------------------------------------------
     def _send(self, **command) -> dict | None:
         try:
-            reply = send_command(self.paths.socket, command, timeout=3)
+            reply = send_command(self.paths.socket, command, timeout=25)
         except ServiceNotRunning as exc:
             self.notify(str(exc), severity="error")
             return None

@@ -128,3 +128,11 @@ async def test_selected_row_survives_refresh(paths, sent):
         pilot.app.refresh_data()
         await pilot.pause()
         assert table.cursor_row == before == 3
+
+
+async def test_commands_wait_long_enough_for_an_epaper_refresh(paths, monkeypatch):
+    seen = []
+    monkeypatch.setattr(tui_app, "send_command", lambda path, cmd, timeout=3: seen.append(timeout) or {"ok": True})
+    async with SlowMovieApp(paths).run_test() as pilot:
+        await pilot.press("space")
+    assert seen and seen[0] >= 20

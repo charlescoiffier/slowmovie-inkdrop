@@ -14,19 +14,23 @@ class ServiceNotRunning(RuntimeError):
 
 
 class ControlServer:
-    def __init__(self, player, path: Path):
+    def __init__(self, player, path: Path, reply_timeout: float = 30.0):
         self.player = player
         self.path = Path(path)
+        self.reply_timeout = reply_timeout
         self._server: socketserver.ThreadingUnixStreamServer | None = None
 
     def start(self) -> None:
-        player = self.player
+        player, reply_timeout = self.player, self.reply_timeout
 
         class Handler(socketserver.StreamRequestHandler):
             def handle(self) -> None:
                 try:
                     request = json.loads(self.rfile.readline(65536) or b"{}")
-                    reply = player.submit(request).result(timeout=10)
+                    reply = player.submit(request).result(timeout=reply_timeout)
+                except TimeoutError:
+                    reply = {"ok": False, "error": "le lecteur est occupé (rafraîchissement en cours), "
+                                                   "réessayez dans un instant"}
                 except Exception as exc:
                     reply = {"ok": False, "error": f"requête invalide : {exc}"}
                 self.wfile.write(json.dumps(reply).encode() + b"\n")

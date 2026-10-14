@@ -16,6 +16,7 @@ class RelayConfig:
     expiry_seconds: int = 21600
     max_upload_bytes: int = 10 * 1024 * 1024
     trust_proxy: bool = False
+    lease_seconds: int = 120     # une image « récupérée » mais sans accusé est reproposée après ce délai
 
     @classmethod
     def from_env(cls, env=os.environ) -> RelayConfig:

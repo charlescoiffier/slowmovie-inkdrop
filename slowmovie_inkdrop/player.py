@@ -125,7 +125,7 @@ class Player:
             with Image.open(item.path) as raw:
                 raw.load()
                 panel = to_panel(raw, (self.display.width, self.display.height), contrast=s.contrast)
-        except (OSError, ValueError) as exc:
+        except Exception as exc:  # noqa: BLE001 - bombe de décompression, mémoire... : l'image est écartée
             log.warning("image %s illisible : %s", item.id, exc)
             self.error = f"Image reçue illisible ({item.id[:8]})"
             self.queue.discard(item)

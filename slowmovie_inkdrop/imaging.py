@@ -5,7 +5,7 @@ import io
 
 from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
 
-ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP"}
+ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "MPO"}   # MPO : JPEG multi-images des téléphones
 
 
 class InvalidImage(ValueError):
@@ -33,7 +33,8 @@ def sanitize_upload(data: bytes, *, max_bytes: int = 10 * 1024 * 1024,
         with Image.open(io.BytesIO(data)) as probe:
             if probe.format not in ALLOWED_FORMATS:
                 raise InvalidImage("Format non pris en charge : utilisez JPEG, PNG ou WebP.", "format")
-            if getattr(probe, "n_frames", 1) > 1 or getattr(probe, "is_animated", False):
+            animated = getattr(probe, "n_frames", 1) > 1 or getattr(probe, "is_animated", False)
+            if animated and probe.format != "MPO":      # un MPO n'est pas une animation : on garde l'image 1
                 raise InvalidImage("Les images animées ne sont pas acceptées.", "format")
             if probe.width * probe.height > max_pixels:
                 raise InvalidImage("Image trop grande (trop de pixels).", "too_large")

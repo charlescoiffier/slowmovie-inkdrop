@@ -23,6 +23,7 @@ class FakeRelay:
     def __init__(self, pending, images=None, fail=False):
         self.pending, self.images, self.fail = pending, images or {}, fail
         self.acks: list[tuple[str, str]] = []
+        self.ack_codes: dict[str, int] = {}
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         if self.fail:
@@ -34,7 +35,10 @@ class FakeRelay:
         if path.startswith("/api/device/image/"):
             return httpx.Response(200, content=self.images[path.rsplit("/", 1)[1]])
         if path.startswith("/api/device/ack/"):
-            self.acks.append((path.rsplit("/", 1)[1], json.loads(request.content)["status"]))
+            image_id = path.rsplit("/", 1)[1]
+            if image_id in self.ack_codes:
+                return httpx.Response(self.ack_codes[image_id], json={"detail": "x"})
+            self.acks.append((image_id, json.loads(request.content)["status"]))
             return httpx.Response(200, json={"ok": True})
         return httpx.Response(404)
 
@@ -110,3 +114,49 @@ def test_lost_ack_is_retried_until_delivered(tmp_path):
 def test_outbox_survives_restart(tmp_path):
     AckOutbox(tmp_path / "acks.json").add(C, "failed")
     assert AckOutbox(tmp_path / "acks.json").pending() == [{"id": C, "status": "failed"}]
+
+
+def test_ack_for_an_id_the_relay_forgot_is_dropped_and_polling_continues(tmp_path):
+    # le relais a été redéployé (données vides) : l'accusé de A répond 404 pour toujours
+    relay = FakeRelay([{"id": B, "duration": 60}], {B: png()})
+    relay.ack_codes[A] = 404
+    queue, outbox = make(tmp_path)
+    outbox.add(A, "shown")
+    sync_cycle(relay.client(), queue, outbox, Settings(), now=1)
+    assert outbox.pending() == []
+    assert [i.id for i in queue.items()] == [B]
+
+
+def test_failing_ack_is_kept_but_does_not_stop_polling(tmp_path):
+    relay = FakeRelay([{"id": B, "duration": 60}], {B: png()})
+    relay.ack_codes[A] = 500
+    queue, outbox = make(tmp_path)
+    outbox.add(A, "shown")
+    sync_cycle(relay.client(), queue, outbox, Settings(), now=1)
+    assert outbox.pending() == [{"id": A, "status": "shown"}]
+    assert [i.id for i in queue.items()] == [B]
+
+
+def test_non_numeric_duration_is_acked_failed(tmp_path):
+    relay = FakeRelay([{"id": A, "duration": "abc"}], {A: png()})
+    queue, outbox = make(tmp_path)
+    sync_cycle(relay.client(), queue, outbox, Settings(), now=1)
+    assert len(queue) == 0 and relay.acks == [(A, "failed")]
+
+
+def test_image_with_too_many_pixels_is_acked_failed(tmp_path, monkeypatch):
+    from slowmovie_inkdrop import relayclient
+    monkeypatch.setattr(relayclient, "MAX_PIXELS", 100)       # l'image de test fait 20x20 = 400
+    relay = FakeRelay([{"id": A, "duration": 60}], {A: png()})
+    queue, outbox = make(tmp_path)
+    sync_cycle(relay.client(), queue, outbox, Settings(), now=1)
+    assert len(queue) == 0 and relay.acks == [(A, "failed")]
+
+
+def test_download_larger_than_the_limit_is_refused():
+    import pytest
+    relay = FakeRelay([], {A: b"x" * 100})
+    client = RelayClient("https://relais.test", "jeton", max_download=10,
+                         client=httpx.Client(transport=httpx.MockTransport(relay.handler)))
+    with pytest.raises(Exception, match="lourde"):
+        client.download(A)

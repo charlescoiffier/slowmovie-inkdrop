@@ -84,3 +84,12 @@ def test_to_panel_contrast_changes_pixels():
     base = Image.new("RGB", (800, 480), (100, 100, 100))
     base.paste((200, 200, 200), (400, 0, 800, 480))        # image non uniforme
     assert to_panel(base, (800, 480), contrast=2.0).getpixel((5, 5)) != (100, 100, 100)
+
+
+def test_multi_picture_jpeg_from_a_phone_is_accepted_using_its_first_picture():
+    first = Image.new("RGB", (60, 40), "red")
+    second = Image.new("RGB", (30, 20), "blue")                  # ex. carte de gain Ultra HDR
+    data = _encode(first, "MPO", save_all=True, append_images=[second])
+    assert Image.open(io.BytesIO(data)).format == "MPO"
+    out = Image.open(io.BytesIO(sanitize_upload(data)))
+    assert out.size == (60, 40) and out.format == "PNG"

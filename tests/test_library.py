@@ -83,3 +83,38 @@ def test_known_ready_file_survives_restart_without_waiting(tmp_path):
     lib2.poll(1000)
     assert lib2.ready() == [vdir / "a.mp4"]
     assert json.loads((tmp_path / "library.json").read_text())["a.mp4"]["status"] == "ready"
+
+
+def test_error_entry_is_probed_again_when_the_file_is_rewritten_with_the_same_size(tmp_path):
+    import os
+    calls = []
+
+    def flaky(path):
+        calls.append(path)
+        if len(calls) == 1:
+            raise ValueError("index manquant")
+        return INFO
+
+    vdir, lib = make(tmp_path, probe=flaky)
+    f = vdir / "a.mp4"
+    f.write_bytes(b"x" * 10)
+    lib.poll(0)
+    lib.poll(11)
+    assert lib.rows()[0]["status"] == "error"
+    os.utime(f, ns=(1, 2_000_000_000))                  # copie terminée : même taille, autre date
+    lib.poll(12)
+    lib.poll(23)
+    assert lib.ready() == [f]
+
+
+def test_ready_file_that_changes_again_leaves_the_ready_list(tmp_path):
+    import os
+    vdir, lib = make(tmp_path)
+    f = vdir / "a.mp4"
+    f.write_bytes(b"x" * 10)
+    lib.poll(0)
+    lib.poll(11)
+    assert lib.ready() == [f]
+    os.utime(f, ns=(1, 3_000_000_000))                  # la copie reprend
+    lib.poll(12)
+    assert lib.ready() == []

@@ -12,7 +12,7 @@ from .videos import VideoInfo, is_supported
 
 class Library:
     def __init__(self, videos_dir: Path, json_path: Path,
-                 probe: Callable[[Path], VideoInfo], settle_seconds: float = 10.0):
+                 probe: Callable[[Path], VideoInfo], settle_seconds: float = 30.0):
         self.videos_dir = Path(videos_dir)
         self.json_path = Path(json_path)
         self.probe = probe
@@ -37,7 +37,7 @@ class Library:
 
     def poll(self, now: float) -> None:
         with self._lock:
-            current: dict[str, int] = {}
+            current: dict[str, tuple[int, int]] = {}
             try:
                 children = list(self.videos_dir.iterdir())
             except OSError:
@@ -45,15 +45,18 @@ class Library:
             for p in children:
                 if is_supported(p.name) and p.is_file():
                     try:
-                        current[p.name] = p.stat().st_size
+                        stat = p.stat()
+                        current[p.name] = (stat.st_size, stat.st_mtime_ns)
                     except OSError:
                         continue
             for name in [n for n in self._entries if n not in current]:
                 del self._entries[name]
-            for name, size in current.items():
+            for name, (size, mtime) in current.items():
                 entry = self._entries.get(name)
-                if entry is None or entry["size"] != size:
-                    self._entries[name] = {"size": size, "status": "pending", "changed_at": now}
+                # taille OU date modifiée : une copie terminée à taille égale, ou reprise, est revue
+                if entry is None or entry["size"] != size or entry.get("mtime", mtime) != mtime:
+                    self._entries[name] = {"size": size, "mtime": mtime, "status": "pending",
+                                           "changed_at": now}
                     continue
                 if entry["status"] == "pending" and now - entry["changed_at"] >= self.settle:
                     try:
