@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Envoyer une image</title>
+<style>
+  :root { --bg:#fafaf7; --fg:#1b1b1b; --muted:#6b6b66; --line:#d9d8d2; --accent:#1b1b1b; --err:#a3281f; --ok:#256b3a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161616; --fg:#eeeeea; --muted:#9a9a94; --line:#333; --accent:#eeeeea; --err:#ff8a80; --ok:#7fd49a; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:17px/1.45 system-ui, sans-serif; }
+  main { max-width:30rem; margin:0 auto; padding:1.5rem 16px 3rem; }
+  h1 { font-size:1.4rem; margin:0 0 .25rem; } p.lead { color:var(--muted); margin:0 0 1.5rem; }
+  label { display:block; font-weight:600; margin:1.1rem 0 .35rem; }
+  input, select, button { width:100%; font:inherit; color:inherit; background:transparent; border:1px solid var(--line); border-radius:8px; padding:.7rem .8rem; }
+  button { background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:600; margin-top:1.4rem; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  #preview { display:none; width:100%; max-height:14rem; object-fit:contain; margin-top:.8rem; border:1px solid var(--line); border-radius:8px; }
+  #msg { margin-top:1.2rem; min-height:1.5rem; } .err { color:var(--err); } .ok { color:var(--ok); }
+  .remember { display:flex; gap:.5rem; align-items:center; margin-top:.7rem; font-weight:400; } .remember input { width:auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Envoyer une image</h1>
+  <p class="lead">Elle s'affichera sur l'écran à son tour, pendant la durée choisie.</p>
+  <form id="form">
+    <label for="image">Image (JPEG, PNG ou WebP)</label>
+    <input id="image" name="image" type="file" accept="image/jpeg,image/png,image/webp" required>
+    <img id="preview" alt="Aperçu">
+    <label for="duration">Durée d'affichage</label>
+    <select id="duration" name="duration"></select>
+    <label for="password">Mot de passe</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <label class="remember"><input id="remember" type="checkbox"> Se souvenir sur cet appareil</label>
+    <button id="submit" type="submit">Envoyer</button>
+  </form>
+  <div id="msg" role="status" aria-live="polite"></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const PRESETS = [[60, "1 minute"], [300, "5 minutes"], [900, "15 minutes"], [1800, "30 minutes"], [3600, "1 heure"]];
+function stored(key, value) {
+  try { if (value === undefined) return localStorage.getItem(key); if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch (e) { return null; }
+}
+function say(text, cls) { $("msg").textContent = text; $("msg").className = cls || ""; }
+function hhmm(seconds) {
+  const d = new Date(Date.now() + seconds * 1000);
+  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+fetch("/api/config").then((r) => r.json()).then((c) => {
+  for (const [s, label] of PRESETS) if (s >= c.min_duration && s <= c.max_duration) $("duration").add(new Option(label, s));
+}).catch(() => PRESETS.forEach(([s, l]) => $("duration").add(new Option(l, s))));
+const saved = stored("sm-password");
+if (saved) { $("password").value = saved; $("remember").checked = true; }
+$("image").addEventListener("change", () => {
+  const f = $("image").files[0];
+  if (f) { $("preview").src = URL.createObjectURL(f); $("preview").style.display = "block"; }
+});
+async function follow(id) {
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 5000));
+    let s;
+    try { s = await (await fetch("/api/status/" + id)).json(); } catch (e) { continue; }
+    if (s.status === "shown") return say("Votre image a été affichée.", "ok");
+    if (s.status === "failed" || s.status === "expired") return say("L'image n'a pas pu être affichée.", "err");
+    if (s.status === "queued" || s.status === "fetched")
+      say(`Position ${s.position} dans la file — affichage vers ${hhmm(s.eta_seconds)}.`, "ok");
+  }
+}
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("submit").disabled = true; say("Envoi en cours…");
+  try {
+    const r = await fetch("/api/send", { method: "POST", body: new FormData($("form")) });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) { say(body.detail || "Erreur " + r.status, "err"); return; }
+    stored("sm-password", $("remember").checked ? $("password").value : null);
+    say(`Reçue. Position ${body.position} — affichage vers ${hhmm(body.eta_seconds)}.`, "ok");
+    follow(body.id);
+  } catch (err) {
+    say("Impossible de joindre le serveur.", "err");
+  } finally { $("submit").disabled = false; }
+});
+</script>
+</body>
+</html>
