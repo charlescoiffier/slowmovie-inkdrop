@@ -121,7 +121,7 @@ class Settings:
         return out
 
     @classmethod
-    def load(cls, path: Path) -> "Settings":
+    def load(cls, path: Path) -> Settings:
         settings = cls()
         values = read_conf(path)
         for f in fields(cls):

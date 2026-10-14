@@ -6,8 +6,8 @@ import logging
 import re
 import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response

@@ -18,7 +18,7 @@ class RelayConfig:
     trust_proxy: bool = False
 
     @classmethod
-    def from_env(cls, env=os.environ) -> "RelayConfig":
+    def from_env(cls, env=os.environ) -> RelayConfig:
         try:
             password_hash = env["SLOWMOVIE_RELAY_PASSWORD_HASH"]
             token = env["SLOWMOVIE_RELAY_DEVICE_TOKEN"]

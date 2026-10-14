@@ -1,10 +1,10 @@
 """Films : extensions, métadonnées ffprobe, progression, film suivant."""
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
-from typing import Sequence
 
 FILE_TYPES = (".avi", ".mp4", ".m4v", ".mkv", ".mov")
 SUBTITLE_TYPES = (".srt", ".ssa", ".ass")

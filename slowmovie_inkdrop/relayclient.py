@@ -6,8 +6,8 @@ import json
 import logging
 import os
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import httpx
 from PIL import Image

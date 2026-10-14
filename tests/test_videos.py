@@ -3,7 +3,12 @@ from pathlib import Path
 import pytest
 
 from slowmovie_inkdrop.videos import (
-    find_subtitles, is_supported, next_video, parse_probe, read_progress, write_progress,
+    find_subtitles,
+    is_supported,
+    next_video,
+    parse_probe,
+    read_progress,
+    write_progress,
 )
 
 MP4 = {"streams": [{"avg_frame_rate": "24000/1001", "nb_frames": "2400", "width": 1920, "height": 1080}],

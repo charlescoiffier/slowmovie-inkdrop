@@ -7,11 +7,12 @@ import os
 import random
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import Future
 from datetime import datetime
 from pathlib import Path
 from queue import Empty, SimpleQueue
-from typing import Callable, Protocol
+from typing import Protocol
 
 from PIL import Image
 

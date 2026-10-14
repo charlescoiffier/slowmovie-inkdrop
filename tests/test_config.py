@@ -3,7 +3,11 @@ from datetime import datetime
 import pytest
 
 from slowmovie_inkdrop.config import (
-    ConfigError, Paths, Settings, in_active_hours, parse_active_hours,
+    ConfigError,
+    Paths,
+    Settings,
+    in_active_hours,
+    parse_active_hours,
 )
 
 
