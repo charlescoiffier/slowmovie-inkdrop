@@ -417,3 +417,36 @@ def test_invalid_remote_settings_are_refused_and_nothing_is_written(make_player,
     ctx.player.tick()
     assert fut.result(timeout=1)["ok"] is False
     assert ctx.paths.conf.read_text() == before and ctx.player.settings.delay == 120
+
+
+def test_remote_snapshot_describes_the_player_without_secrets(make_player):
+    ctx = make_player(videos=("a.mp4", "b.mp4"), relay_token="jeton-secret", relay_url="https://x.test")
+    ctx.player.starts.set("b.mp4", 12)
+    ctx.queue.add(A, png_bytes(), 90, ctx.clock(), caption="Bonjour")
+    ctx.player.tick()                       # affiche d'abord l'image envoyée
+    snap = ctx.player.remote_snapshot(ctx.clock())
+    assert snap["mode"] == "IMAGE" and snap["paused"] is False
+    assert snap["queue"] == [] and snap["video"] is None
+    ctx.clock.advance(120)
+    ctx.player.tick()                       # puis le film
+    snap = ctx.player.remote_snapshot(ctx.clock())
+    assert snap["video"] == "a.mp4" and snap["duration_seconds"] == 100.0 and snap["position_seconds"] > 0
+    films = {f["name"]: f for f in snap["films"]}
+    assert films["b.mp4"]["start_seconds"] == 12 and films["a.mp4"]["fps"] == 24.0
+    assert films["a.mp4"]["status"] == "ready" and films["a.mp4"]["subtitle_codecs"] == []
+    text = json.dumps(snap)
+    assert "jeton-secret" not in text and "relay_url" not in snap["settings"] and "x.test" not in text
+    assert snap["settings"]["delay"] == 120 and "subtitle_track" in snap["settings"]
+
+
+def test_remote_snapshot_lists_the_waiting_images_with_their_captions(make_player):
+    ctx = make_player(videos=())
+    ctx.queue.add(A, png_bytes(), 90, ctx.clock(), caption="Texte")
+    snap = ctx.player.remote_snapshot(ctx.clock())
+    assert snap["queue"] == [{"id": A, "duration": 90, "caption": "Texte"}]
+
+
+def test_remote_snapshot_stays_small_with_many_films(make_player):
+    names = tuple(f"film numéro {i} avec un nom assez long pour faire du volume.mkv" for i in range(200))
+    ctx = make_player(videos=names)
+    assert len(json.dumps(ctx.player.remote_snapshot(ctx.clock()))) < 64 * 1024

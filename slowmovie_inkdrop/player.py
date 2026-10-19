@@ -20,7 +20,7 @@ from .config import Paths, Settings, in_active_hours
 from .display import Display
 from .image_queue import ImageQueue, QueuedImage
 from .imaging import clean_caption, draw_caption, to_panel
-from .remote import check_setting_value
+from .remote import REMOTE_SETTINGS, check_setting_value
 from .starts import StartPoints, seconds_to_frame
 from .videos import VideoInfo, has_progress, next_video, probe_video, read_progress, write_progress
 
@@ -350,6 +350,31 @@ class Player:
         self.queue.max_items = new.queue_max
         self.queue.expiry_seconds = new.queue_expiry_seconds
         return {"ok": True}
+
+    def remote_snapshot(self, now: float) -> dict:
+        """Instantané envoyé au relais : ni jeton, ni adresse du relais."""
+        s, info = self.settings, self.info
+        starts = self.starts.all()
+        films = []
+        for row in self.library.rows():
+            fps = row.get("fps") or 0.0
+            frame = read_progress(self.paths.progress, self.paths.videos_dir(s) / row["name"])
+            films.append({
+                "name": row["name"], "status": row["status"], "duration_seconds": row.get("duration"),
+                "fps": fps, "position_seconds": round(frame / fps, 1) if fps else 0.0,
+                "start_seconds": starts.get(row["name"], 0.0), "error": row.get("error", ""),
+                "subtitle_codecs": row.get("subtitle_codecs", []),
+            })
+        return {
+            "sent_at": now, "mode": self.mode, "paused": self.paused,
+            "video": self.video.name if self.video else None,
+            "position_seconds": round(self.frame / info.fps, 1) if info else 0.0,
+            "duration_seconds": info.duration if info else None,
+            "error": self.error,
+            "queue": [{"id": i.id, "duration": i.duration, "caption": i.caption} for i in self.queue.items()],
+            "settings": {name: getattr(s, name) for name in REMOTE_SETTINGS},
+            "films": films,
+        }
 
     # -- état ------------------------------------------------------------
     def snapshot(self, now: float) -> dict:
