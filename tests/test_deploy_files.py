@@ -91,3 +91,25 @@ def test_install_script_downloads_to_disk_not_to_the_ram_backed_tmp():
     script = (ROOT / "deploy/install-pi.sh").read_text()
     assert 'mktemp -d -p "$HOME"' in script
     assert "mktemp -d)" not in script
+
+
+def test_relay_env_example_documents_the_admin_variables():
+    env = (ROOT / "deploy/relay/relay.env.example").read_text()
+    assert "SLOWMOVIE_RELAY_ADMIN_PASSWORD_HASH" in env and "SLOWMOVIE_RELAY_SESSION_SECRET" in env
+
+
+def test_update_script_upgrades_the_package_and_restarts_the_service():
+    import subprocess
+    path = ROOT / "deploy/update-pi.sh"
+    assert path.stat().st_mode & 0o111
+    assert subprocess.run(["bash", "-n", str(path)], capture_output=True).returncode == 0
+    script = path.read_text()
+    assert "set -euo pipefail" in script and "git pull --ff-only" in script
+    assert "install --upgrade" in script and "systemctl restart slowmovie" in script
+    assert "/home/admin/.SlowMovie" in script
+
+
+def test_deployment_guide_covers_the_admin_tab_and_the_update():
+    guide = (ROOT / "docs/deploiement.md").read_text()
+    for expected in ("SLOWMOVIE_RELAY_ADMIN_PASSWORD_HASH", "update-pi.sh", "Réglages", "/envoi/"):
+        assert expected in guide, expected

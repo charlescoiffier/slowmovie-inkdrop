@@ -116,6 +116,64 @@ relay-token = <le jeton de l'appareil>
 
 puis `sudo systemctl restart slowmovie`. Le nom de l'écran (`epd`) vaut `waveshare_epd.epd7in5_V2` par défaut.
 
+### Mettre à jour le Pi
+
+La première fois, le Pi doit avoir un vrai clone du dépôt (et non une copie) :
+
+```bash
+rm -rf ~/slowmovie-inkdrop && git clone https://github.com/charlescoiffier/slowmovie-inkdrop
+cd slowmovie-inkdrop && ./deploy/install-pi.sh      # idempotent : ne refait que ce qui manque
+```
+
+Ensuite, pour chaque nouvelle version :
+
+```bash
+cd ~/slowmovie-inkdrop && ./deploy/update-pi.sh      # git pull, pip install --upgrade, redémarrage du service
+```
+
+## 2 bis. Pilotage depuis la passerelle (onglet « Réglages »)
+
+L'onglet « Réglages » de `https://inkdrop.charlescoiffier.fr` permet, après une connexion **administrateur**, de voir
+l'état du Pi et de le piloter : pause, passer, choix du film, point de départ et « aller à » en `hh:mm:ss`, sous-titres,
+et les mêmes réglages que la TUI. Un changement met jusqu'à ~20 s à arriver (le Pi interroge le relais toutes les 20 s),
+puis la page indique « appliqué » ou le motif du refus.
+
+**Mise en place**
+
+1. Choisir un mot de passe administrateur **différent** de celui des envois et calculer son haché :
+
+   ```bash
+   cd ~/dev/slowmovie-inkdrop && .venv/bin/slowmovie-relay hash-password
+   ```
+
+2. L'ajouter dans `~/srv/inkdrop/.env` sur le VPS (`SLOWMOVIE_RELAY_ADMIN_PASSWORD_HASH=scrypt:…`, voir
+   `deploy/relay/relay.env.example`) puis recréer le conteneur :
+
+   ```bash
+   cd ~/srv/inkdrop && docker compose up -d --force-recreate
+   ```
+
+   Sans ce haché, l'onglet n'apparaît pas et les routes d'administration répondent 503.
+3. Mettre le Pi à jour (section précédente).
+
+**Sécurité**
+- Le mot de passe d'envoi n'ouvre aucune route d'administration, et inversement. Session : cookie fermé
+  (`HttpOnly`, `Secure`, `SameSite=Strict`), 8 h ; 5 mots de passe faux bloquent l'adresse 15 min.
+- Le Pi **revalide chaque commande** : il ne peut être commandé que pour les réglages de la liste ci-dessus. Jamais
+  modifiables à distance : l'adresse du relais, le jeton, l'écran, les dossiers. Pas de suppression ni d'envoi de film.
+- Une commande que le Pi n'a pas récupérée en 10 minutes expire ; une commande n'est jamais appliquée deux fois.
+
+**Sous-titres** : `subtitles = true` lit le fichier `.srt/.ass/.ssa` voisin s'il existe, sinon la piste intégrée au film
+(`subtitle-track`, numéro parmi tous les flux de sous-titres, 0 par défaut). Seuls les sous-titres **texte** sont pris en
+charge ; les sous-titres image (PGS, VobSub) sont ignorés.
+
+**Point de départ** : il s'applique à la première lecture d'un film, à « Revenir au départ » et quand le film recommence
+en boucle ; il ne déplace pas un film déjà commencé. « Aller à » saute à un timecode tout de suite. Dans la TUI :
+`t` (point de départ), `g` (aller à), `z` (revenir au départ), `↓` depuis les onglets pour entrer dans la liste.
+
+**Page de confirmation** : après un envoi accepté, la page passe sur `/envoi/<identifiant>`, qui suit l'image
+(reçue, position, affichée) et peut être rechargée ou mise en favori.
+
 ## 3. Mac
 
 ```bash
@@ -146,4 +204,10 @@ Variables facultatives : `SLOWMOVIE_HOST` (défaut `slomovpi.local`, nom d'hôte
 - [ ] Envoyer une photo avec un texte de 128 caractères accentués (« Été à Paris… ») : il est lisible, centré en bas, sur 3 lignes au plus, sans carrés à la place des accents.
 - [ ] Envoyer deux images depuis deux appareils : affichées dans l'ordre, le film reprend après la seconde.
 - [ ] 5 mauvais mots de passe, puis le bon : blocage avec message ; un `.svg` et un GIF animé sont refusés.
+- [ ] Onglet « Réglages » : mauvais mot de passe refusé, bon mot de passe accepté ; l'état du Pi s'affiche en moins de 40 s.
+- [ ] Changer de film depuis le téléphone : le Pi bascule en moins de 40 s, le statut passe à « appliqué ».
+- [ ] Régler un point de départ, puis « Aller à » un timecode : l'écran affiche l'image attendue.
+- [ ] Activer les sous-titres sur le film Kaguya (ou voir le message si ce sont des sous-titres image).
+- [ ] Un réglage interdit (par exemple `relay_url`, via `curl`) est refusé ; « Se déconnecter » redemande le mot de passe.
+- [ ] Après un envoi d'image, la page `/envoi/<identifiant>` suit l'image jusqu'à « affichée ».
 - [ ] Couper le relais 2 minutes : le film continue. Redémarrer le Pi pendant une image : elle reste jusqu'à l'échéance, sans boucle de redémarrage.

@@ -9,6 +9,8 @@ Raspberry Pi) avec trois apports :
    le film à l'écran pendant ce temps (le film est en pause), puis le film reprend là où il s'était arrêté. Les envois
    forment une file d'attente, protégée par un mot de passe partagé.
    Un **texte** de 128 caractères au plus peut accompagner l'image : il s'affiche en blanc cerclé de noir, centré en bas.
+   Un onglet **Réglages** (mot de passe administrateur séparé) permet de piloter le Pi à distance : film, position de
+   départ, sous-titres et réglages.
 2. **Interface terminal** (TUI Textual, au clavier, thème « galaxy » comme [cadav](https://github.com/charlescoiffier/cadav)).
 3. **Ajout de films simplifié** : glisser-déposer dans un partage réseau, ou `slowmovie add film.mp4`.
 
