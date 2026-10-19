@@ -194,6 +194,14 @@ class Paths:
         return self.base / "progress"
 
     @property
+    def starts(self) -> Path:
+        return self.base / "films.json"
+
+    @property
+    def commands(self) -> Path:
+        return self.base / "commands.json"
+
+    @property
     def now_playing(self) -> Path:
         return self.base / "nowPlaying"
 

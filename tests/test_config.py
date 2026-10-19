@@ -92,3 +92,8 @@ def test_videos_dir_absolute(tmp_path):
 def test_caption_max_chars_out_of_range_is_refused(tmp_path, value):
     with pytest.raises(ConfigError):
         Settings(caption_max_chars=value).save(tmp_path / "x.conf")
+
+
+def test_paths_for_start_points_and_command_log(tmp_path):
+    paths = Paths(tmp_path)
+    assert paths.starts == tmp_path / "films.json" and paths.commands == tmp_path / "commands.json"
