@@ -1,6 +1,7 @@
 """Stockage du relais : SQLite pour l'état, fichiers PNG pour les images."""
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 from pathlib import Path
@@ -25,6 +26,11 @@ class Store:
                 self._db.execute("ALTER TABLE items ADD COLUMN fetched_at REAL")
             if "caption" not in columns:                  # base créée avant l'ajout du texte
                 self._db.execute("ALTER TABLE items ADD COLUMN caption TEXT NOT NULL DEFAULT ''")
+            self._db.execute("CREATE TABLE IF NOT EXISTS device_state (id INTEGER PRIMARY KEY CHECK (id = 1), "
+                             "body TEXT NOT NULL, received_at REAL NOT NULL)")
+            self._db.execute("CREATE TABLE IF NOT EXISTS commands (id TEXT PRIMARY KEY, kind TEXT NOT NULL, "
+                             "payload TEXT NOT NULL, status TEXT NOT NULL, message TEXT NOT NULL DEFAULT '', "
+                             "created_at REAL NOT NULL, done_at REAL)")
             self._db.commit()
 
     def image_path(self, image_id: str) -> Path:
@@ -94,3 +100,59 @@ class Store:
             self._db.execute("DELETE FROM items WHERE status IN ('shown','failed','expired') "
                              "AND created_at < ?", (now - 86400,))
             self._db.commit()
+
+    # -- pilotage : instantané du Pi et commandes --------------------------
+    def put_state(self, body: str, now: float) -> None:
+        with self._lock:
+            self._db.execute("INSERT INTO device_state (id, body, received_at) VALUES (1, ?, ?) "
+                             "ON CONFLICT(id) DO UPDATE SET body = excluded.body, received_at = excluded.received_at",
+                             (body, now))
+            self._db.commit()
+
+    def get_state(self) -> tuple[dict, float] | None:
+        with self._lock:
+            row = self._db.execute("SELECT body, received_at FROM device_state WHERE id = 1").fetchone()
+        return (json.loads(row["body"]), row["received_at"]) if row else None
+
+    def add_command(self, command_id: str, kind: str, payload: dict, now: float) -> None:
+        with self._lock:
+            self._db.execute("INSERT INTO commands (id, kind, payload, status, created_at) "
+                             "VALUES (?, ?, ?, 'pending', ?)", (command_id, kind, json.dumps(payload), now))
+            self._db.commit()
+
+    def pending_commands(self, now: float, ttl: float) -> list[dict]:
+        with self._lock:
+            rows = self._db.execute("SELECT id, kind, payload FROM commands WHERE status = 'pending' "
+                                    "AND created_at >= ? ORDER BY created_at, id", (now - ttl,)).fetchall()
+        return [{"id": r["id"], "kind": r["kind"], "payload": json.loads(r["payload"])} for r in rows]
+
+    def pending_count(self) -> int:
+        with self._lock:
+            return self._db.execute("SELECT COUNT(*) FROM commands WHERE status = 'pending'").fetchone()[0]
+
+    def expire_commands(self, now: float, ttl: float) -> None:
+        with self._lock:
+            self._db.execute("UPDATE commands SET status = 'expired', done_at = ? "
+                             "WHERE status = 'pending' AND created_at < ?", (now, now - ttl))
+            self._db.execute("DELETE FROM commands WHERE created_at < ?", (now - 86400,))
+            self._db.commit()
+
+    def ack_command(self, command_id: str, status: str, message: str, now: float) -> bool:
+        with self._lock:
+            cursor = self._db.execute("UPDATE commands SET status = ?, message = ?, done_at = ? "
+                                      "WHERE id = ? AND status = 'pending'",
+                                      (status, message[:300], now, command_id))
+            self._db.commit()
+            return cursor.rowcount == 1
+
+    def get_command(self, command_id: str) -> dict | None:
+        with self._lock:
+            row = self._db.execute("SELECT id, kind, status, message, created_at FROM commands WHERE id = ?",
+                                   (command_id,)).fetchone()
+        return dict(row) if row else None
+
+    def recent_commands(self, limit: int) -> list[dict]:
+        with self._lock:
+            rows = self._db.execute("SELECT id, kind, status, message, created_at FROM commands "
+                                    "ORDER BY created_at DESC, id DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(r) for r in rows]

@@ -18,6 +18,11 @@ class RelayConfig:
     trust_proxy: bool = False
     caption_max: int = 128       # longueur maximale du texte affiché sous l'image
     lease_seconds: int = 120     # une image « récupérée » mais sans accusé est reproposée après ce délai
+    admin_password_hash: str = ""   # vide : l'administration est désactivée
+    session_secret: str = ""        # vide : clé aléatoire à chaque démarrage
+    command_ttl_seconds: int = 600
+    state_max_bytes: int = 65536
+    session_seconds: int = 28800
 
     @classmethod
     def from_env(cls, env=os.environ) -> RelayConfig:
@@ -34,5 +39,7 @@ class RelayConfig:
             queue_max=int(env.get("SLOWMOVIE_RELAY_QUEUE_MAX", 10)),
             expiry_seconds=int(env.get("SLOWMOVIE_RELAY_EXPIRY", 21600)),
             caption_max=int(env.get("SLOWMOVIE_RELAY_CAPTION_MAX", 128)),
+            admin_password_hash=env.get("SLOWMOVIE_RELAY_ADMIN_PASSWORD_HASH", ""),
+            session_secret=env.get("SLOWMOVIE_RELAY_SESSION_SECRET", ""),
             trust_proxy=env.get("SLOWMOVIE_RELAY_TRUST_PROXY", "") == "1",
         )

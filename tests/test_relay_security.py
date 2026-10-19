@@ -59,3 +59,17 @@ def test_hash_is_safe_in_env_files():
     stored = hash_password("x")
     assert "$" not in stored and " " not in stored and "'" not in stored
     assert verify_password("x", stored)
+
+
+def test_session_token_roundtrip_expiry_and_tampering():
+    from slowmovie_inkdrop.relay.security import make_session_token, verify_session_token
+    secret = b"s" * 32
+    token = make_session_token(secret, now=1000.0, ttl=100.0)
+    assert verify_session_token(secret, token, now=1050.0)
+    assert not verify_session_token(secret, token, now=1101.0)               # expiré
+    assert not verify_session_token(b"autre" * 8, token, now=1050.0)         # autre clé
+    expiry, nonce, sig = token.split(".")
+    assert not verify_session_token(secret, f"{int(expiry) + 999}.{nonce}.{sig}", now=1050.0)   # falsifié
+    for bad in ("", "x", "a.b", "a.b.c.d", "abc.def.ghi", ".."):
+        assert not verify_session_token(secret, bad, now=1050.0)
+    assert make_session_token(secret, 1000.0, 100.0) != token                  # aléa différent

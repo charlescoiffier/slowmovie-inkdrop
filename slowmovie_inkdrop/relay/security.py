@@ -5,6 +5,7 @@ import base64
 import hashlib
 import hmac
 import os
+import secrets
 from collections import defaultdict, deque
 from collections.abc import Callable
 
@@ -69,3 +70,18 @@ class RateLimiter:
             return False
         sends.append(now)
         return True
+
+
+def make_session_token(secret: bytes, now: float, ttl: float) -> str:
+    body = f"{int(now + ttl)}.{secrets.token_hex(8)}"
+    signature = hmac.new(secret, body.encode(), hashlib.sha256).hexdigest()
+    return f"{body}.{signature}"
+
+
+def verify_session_token(secret: bytes, token: str, now: float) -> bool:
+    try:
+        expiry, nonce, signature = token.split(".")
+        expected = hmac.new(secret, f"{expiry}.{nonce}".encode(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(signature, expected) and int(expiry) > now
+    except (ValueError, AttributeError):
+        return False
