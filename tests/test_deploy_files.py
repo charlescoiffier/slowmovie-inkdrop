@@ -84,3 +84,10 @@ def test_install_script_keeps_rpi_swap_on_trixie_instead_of_replacing_it():
 def test_install_script_does_not_block_when_run_without_a_terminal():
     script = (ROOT / "deploy/install-pi.sh").read_text()
     assert "[ -t 0 ]" in script and "sudo smbpasswd -a admin" in script
+
+
+def test_install_script_downloads_to_disk_not_to_the_ram_backed_tmp():
+    # /tmp est un tmpfs de ~200 Mo sur un Zero 2 W : l'archive waveshare n'y tient pas
+    script = (ROOT / "deploy/install-pi.sh").read_text()
+    assert 'mktemp -d -p "$HOME"' in script
+    assert "mktemp -d)" not in script

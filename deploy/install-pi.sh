@@ -51,7 +51,7 @@ echo "== 7-8. SlowMovie-Inkdrop et ses dépendances (ffmpeg-python, Pillow, Text
 
 echo "== 9. waveshare-epd (installation manuelle)"
 if ! "$VENV/bin/python" -c "import waveshare_epd" 2>/dev/null; then
-  WORK="$(mktemp -d)"
+  WORK="$(mktemp -d -p "$HOME")"   # pas /tmp : tmpfs de ~200 Mo sur un Zero 2 W
   wget -O "$WORK/e-Paper.zip" https://github.com/waveshareteam/e-Paper/archive/refs/heads/master.zip
   unzip -q "$WORK/e-Paper.zip" -d "$WORK"
   "$VENV/bin/pip" install "$WORK/e-Paper-master/RaspberryPi_JetsonNano/python/"
