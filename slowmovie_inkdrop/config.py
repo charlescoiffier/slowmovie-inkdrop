@@ -81,6 +81,7 @@ class Settings:
     fullscreen: bool = False
     subtitles: bool = False
     timecode: bool = False
+    subtitle_track: int = 0     # piste de sous-titres intégrée (parmi tous les flux de sous-titres)
     epd: str = "waveshare_epd.epd7in5_V2"
     contrast: float = 1.0
     clear: bool = False
@@ -106,6 +107,7 @@ class Settings:
 
         check(self.delay >= 1, "delay", "doit être au moins 1")
         check(self.increment >= 1, "increment", "doit être au moins 1")
+        check(0 <= self.subtitle_track <= 50, "subtitle_track", "doit être entre 0 et 50")
         check(0.1 <= self.contrast <= 3.0, "contrast", "doit être entre 0.1 et 3.0")
         check(self.min_image_seconds >= 1, "min_image_seconds", "doit être au moins 1")
         check(self.max_image_seconds >= self.min_image_seconds, "max_image_seconds",

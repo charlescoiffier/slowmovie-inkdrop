@@ -97,3 +97,13 @@ def test_caption_max_chars_out_of_range_is_refused(tmp_path, value):
 def test_paths_for_start_points_and_command_log(tmp_path):
     paths = Paths(tmp_path)
     assert paths.starts == tmp_path / "films.json" and paths.commands == tmp_path / "commands.json"
+
+
+@pytest.mark.parametrize("value", [-1, 51])
+def test_subtitle_track_out_of_range_is_refused(tmp_path, value):
+    with pytest.raises(ConfigError):
+        Settings(subtitle_track=value).save(tmp_path / "x.conf")
+
+
+def test_subtitle_track_defaults_to_the_first_one():
+    assert Settings().subtitle_track == 0
