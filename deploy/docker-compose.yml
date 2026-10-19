@@ -1,0 +1,27 @@
+# Modèle de déploiement pour inkdrop.charlescoiffier.fr (généré par scripts/new-site.sh)
+# Copié automatiquement sur le VPS dans ~/srv/inkdrop/ à chaque déploiement.
+# Variables d'environnement de l'appli : fichier ~/srv/inkdrop/.env sur le VPS (optionnel, jamais commité).
+services:
+  app:
+    image: ghcr.io/charlescoiffier/slowmovie-inkdrop:latest
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    networks: [web]
+    # Garde-fous : une appli qui s'emballe ne doit pas faire tomber les autres sites (VPS : 1 cœur, 3,8 Go)
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 200
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=web
+      - traefik.http.routers.inkdrop.rule=Host(`inkdrop.charlescoiffier.fr`)
+      - traefik.http.routers.inkdrop.tls.certresolver=le
+      - traefik.http.services.inkdrop.loadbalancer.server.port=8077
+
+networks:
+  web:
+    external: true

@@ -10,11 +10,11 @@ d'image Docker, construite par GitHub Actions et publiée sur GHCR.
    la protection Traefik bloquerait aussi le Pi, qui interroge le relais avec un jeton :
 
    ```bash
-   scripts/new-site.sh slowmovie ~/dev/slowmovie-inkdrop --port 8077
+   scripts/new-site.sh inkdrop ~/dev/slowmovie-inkdrop --port 8077
    ```
 
    Le script ajoute `deploy/docker-compose.yml` et `.github/workflows/deploy.yml` au dépôt, crée
-   `~/srv/slowmovie/` sur le VPS et pose les secrets GitHub. `--dry-run` génère les fichiers sans toucher au VPS.
+   `~/srv/inkdrop/` sur le VPS et pose les secrets GitHub. `--dry-run` génère les fichiers sans toucher au VPS.
    Le `Dockerfile` à la racine de ce dépôt construit l'image du relais.
 
 2. Générer le mot de passe haché et le jeton de l'appareil (sur le Mac) :
@@ -24,12 +24,12 @@ d'image Docker, construite par GitHub Actions et publiée sur GHCR.
    python3 -c "import secrets; print(secrets.token_urlsafe(32))"
    ```
 
-3. Sur le VPS, créer `~/srv/slowmovie/.env` (droits `600`, jamais dans git) d'après `deploy/relay/relay.env.example`
+3. Sur le VPS, créer `~/srv/inkdrop/.env` (droits `600`, jamais dans git) d'après `deploy/relay/relay.env.example`
    avec `SLOWMOVIE_RELAY_PASSWORD_HASH` et `SLOWMOVIE_RELAY_DEVICE_TOKEN`.
 
 4. Commiter et pousser le dépôt : le workflow construit l'image et déploie.
 
-5. Vérifier : `curl -I https://slowmovie.charlescoiffier.fr/` répond `200`.
+5. Vérifier : `curl -I https://inkdrop.charlescoiffier.fr/` répond `200`.
 
 Notes :
 - La file d'attente du relais est dans le conteneur : un nouveau déploiement la vide (les images expirent de toute
@@ -110,7 +110,7 @@ Commandes utiles sur le Pi : `systemctl status slowmovie`, `journalctl -u slowmo
 Dans `/home/admin/SlowMovie/slowmovie.conf` :
 
 ```
-relay-url = https://slowmovie.charlescoiffier.fr
+relay-url = https://inkdrop.charlescoiffier.fr
 relay-token = <le jeton de l'appareil>
 ```
 
@@ -130,7 +130,7 @@ Variables facultatives : `SLOWMOVIE_HOST` (défaut `slomovpi.local`, nom d'hôte
 
 ## 4. Sécurité
 
-- Droits `600` sur `slowmovie.conf` (contient le jeton) et sur `~/srv/slowmovie/.env`.
+- Droits `600` sur `slowmovie.conf` (contient le jeton) et sur `~/srv/inkdrop/.env`.
 - Changer le mot de passe d'envoi : `slowmovie-relay hash-password`, mettre à jour `.env`, redéployer.
 - Changer le jeton de l'appareil : le modifier dans `.env` du VPS **et** dans `slowmovie.conf` du Pi.
 - Le Pi n'ouvre aucun port : il interroge le relais en HTTPS sortant.
