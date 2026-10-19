@@ -118,3 +118,27 @@ def test_ready_file_that_changes_again_leaves_the_ready_list(tmp_path):
     os.utime(f, ns=(1, 3_000_000_000))                  # la copie reprend
     lib.poll(12)
     assert lib.ready() == []
+
+
+def test_ready_entry_records_fps_and_subtitle_tracks(tmp_path):
+    info = VideoInfo(24.0, 100.0, 2400, 1920, 1080, ("subrip",))
+    vdir, lib = make(tmp_path, probe=lambda p: info)
+    (vdir / "a.mp4").write_bytes(b"x")
+    lib.poll(0)
+    lib.poll(11)
+    row = lib.rows()[0]
+    assert row["fps"] == 24.0 and row["subtitle_codecs"] == ["subrip"]
+
+
+def test_ready_entry_saved_by_an_older_version_is_probed_again_without_waiting(tmp_path):
+    vdir = tmp_path / "Videos"
+    vdir.mkdir()
+    f = vdir / "a.mp4"
+    f.write_bytes(b"x")
+    st = f.stat()
+    (tmp_path / "library.json").write_text(json.dumps({"a.mp4": {
+        "size": st.st_size, "mtime": st.st_mtime_ns, "status": "ready", "changed_at": 0,
+        "frames": 5, "duration": 1.0}}))
+    lib = Library(vdir, tmp_path / "library.json", lambda p: INFO, settle_seconds=10)
+    lib.poll(1)                                   # pas d'attente de 10 s : le film était déjà prêt
+    assert lib.rows()[0]["fps"] == 24.0 and lib.ready() == [f]

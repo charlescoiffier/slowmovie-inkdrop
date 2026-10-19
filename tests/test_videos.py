@@ -4,6 +4,7 @@ import pytest
 
 from slowmovie_inkdrop.videos import (
     find_subtitles,
+    has_progress,
     is_supported,
     next_video,
     parse_probe,
@@ -64,3 +65,49 @@ def test_find_subtitles(tmp_path):
     (tmp_path / "f.srt").touch()
     assert find_subtitles(tmp_path / "f.mp4") == tmp_path / "f.srt"
     assert find_subtitles(tmp_path / "g.mp4") is None
+
+
+def test_parse_probe_collects_subtitle_streams_and_ignores_cover_art():
+    probe = {"streams": [
+        {"codec_type": "video", "avg_frame_rate": "0/0", "width": 600, "height": 900,
+         "disposition": {"attached_pic": 1}},
+        {"codec_type": "video", "avg_frame_rate": "24000/1001", "nb_frames": "2400",
+         "width": 1920, "height": 1040, "disposition": {"attached_pic": 0}},
+        {"codec_type": "audio", "codec_name": "ac3"},
+        {"codec_type": "subtitle", "codec_name": "subrip"},
+        {"codec_type": "subtitle", "codec_name": "hdmv_pgs_subtitle"}],
+        "format": {"duration": "100.1"}}
+    info = parse_probe(probe)
+    assert (info.width, info.height, info.frame_count) == (1920, 1040, 2400)
+    assert info.subtitle_codecs == ("subrip", "hdmv_pgs_subtitle")
+    assert info.usable_subtitle_track(0)
+    assert not info.usable_subtitle_track(1)          # sous-titres image : non rendus
+    assert not info.usable_subtitle_track(2) and not info.usable_subtitle_track(-1)
+
+
+def test_a_film_without_subtitle_streams_has_no_usable_track():
+    info = parse_probe(MP4)
+    assert info.subtitle_codecs == () and not info.usable_subtitle_track(0)
+
+
+def test_a_file_with_only_cover_art_is_rejected():
+    probe = {"streams": [{"codec_type": "video", "avg_frame_rate": "0/0", "width": 1, "height": 1,
+                          "disposition": {"attached_pic": 1}}], "format": {"duration": "1"}}
+    with pytest.raises(ValueError):
+        parse_probe(probe)
+
+
+def test_has_progress(tmp_path):
+    video = Path("/x/film.mp4")
+    assert not has_progress(tmp_path, video)
+    write_progress(tmp_path, video, 0)
+    assert has_progress(tmp_path, video)
+
+
+def test_find_subtitles_survives_glob_characters_in_the_film_name(tmp_path):
+    film = tmp_path / "Film [2013] * (v2).mkv"
+    film.touch()
+    (tmp_path / "Film [2013] * (v2).fr.srt").touch()
+    (tmp_path / "Autre film.srt").touch()
+    assert find_subtitles(film) == tmp_path / "Film [2013] * (v2).fr.srt"
+    assert find_subtitles(tmp_path / "Inconnu.mkv") is None

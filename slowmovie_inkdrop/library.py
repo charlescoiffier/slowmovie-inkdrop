@@ -58,13 +58,16 @@ class Library:
                     self._entries[name] = {"size": size, "mtime": mtime, "status": "pending",
                                            "changed_at": now}
                     continue
-                if entry["status"] == "pending" and now - entry["changed_at"] >= self.settle:
+                due = entry["status"] == "pending" and now - entry["changed_at"] >= self.settle
+                legacy = entry["status"] == "ready" and "fps" not in entry    # entrée d'une ancienne version
+                if due or legacy:
                     try:
                         info = self.probe(self.videos_dir / name)
                     except Exception as exc:  # ffprobe : tout échec = film inutilisable
                         entry.update(status="error", error=str(exc)[:200])
                     else:
-                        entry.update(status="ready", frames=info.frame_count, duration=info.duration)
+                        entry.update(status="ready", frames=info.frame_count, duration=info.duration,
+                                     fps=info.fps, subtitle_codecs=list(info.subtitle_codecs))
             self._save()
 
     def ready(self) -> list[Path]:

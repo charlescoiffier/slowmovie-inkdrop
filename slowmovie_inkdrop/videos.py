@@ -14,6 +14,9 @@ def is_supported(name: str) -> bool:
     return Path(name).suffix.lower() in FILE_TYPES and not name.startswith(".")
 
 
+TEXT_SUBTITLE_CODECS = frozenset({"subrip", "srt", "ass", "ssa", "mov_text", "webvtt", "text"})
+
+
 @dataclass(frozen=True)
 class VideoInfo:
     fps: float
@@ -21,6 +24,7 @@ class VideoInfo:
     frame_count: int
     width: int
     height: int
+    subtitle_codecs: tuple[str, ...] = ()
 
     @property
     def frame_time_ms(self) -> float:
@@ -30,13 +34,20 @@ class VideoInfo:
     def aspect_ratio(self) -> float:
         return self.width / self.height
 
+    def usable_subtitle_track(self, track: int) -> bool:
+        """Vrai si la piste existe et contient des sous-titres texte (les sous-titres image ne sont pas rendus)."""
+        return 0 <= track < len(self.subtitle_codecs) and self.subtitle_codecs[track] in TEXT_SUBTITLE_CODECS
+
 
 def parse_probe(probe: dict) -> VideoInfo:
     try:
         streams = probe["streams"]
-        if not streams:
+        videos = [s for s in streams if s.get("codec_type", "video") == "video"]
+        real = [s for s in videos if not (s.get("disposition") or {}).get("attached_pic")]
+        candidates = real or videos
+        if not candidates:
             raise ValueError("aucun flux vidéo")
-        stream = streams[0]
+        stream = candidates[0]
         fps = float(Fraction(stream["avg_frame_rate"]))
         if fps <= 0:
             raise ValueError("fréquence d'images invalide")
@@ -47,7 +58,8 @@ def parse_probe(probe: dict) -> VideoInfo:
             frames = int(duration * fps)
         if frames < 1:
             raise ValueError("film vide")
-        return VideoInfo(fps, duration, frames, int(stream["width"]), int(stream["height"]))
+        subtitles = tuple(str(s.get("codec_name", "")) for s in streams if s.get("codec_type") == "subtitle")
+        return VideoInfo(fps, duration, frames, int(stream["width"]), int(stream["height"]), subtitles)
     except (KeyError, TypeError, ZeroDivisionError) as exc:
         raise ValueError(f"métadonnées vidéo inexploitables ({exc!r})") from exc
 
@@ -55,7 +67,7 @@ def parse_probe(probe: dict) -> VideoInfo:
 def probe_video(path: Path) -> VideoInfo:
     import ffmpeg  # import paresseux
 
-    return parse_probe(ffmpeg.probe(str(path), select_streams="v"))
+    return parse_probe(ffmpeg.probe(str(path)))
 
 
 def _progress_file(progress_dir: Path, video: Path) -> Path:
@@ -73,6 +85,10 @@ def write_progress(progress_dir: Path, video: Path, frame: int) -> None:
     _progress_file(progress_dir, video).write_text(str(int(frame)))
 
 
+def has_progress(progress_dir: Path, video: Path) -> bool:
+    return _progress_file(progress_dir, video).is_file()
+
+
 def next_video(videos: Sequence[Path], current: Path | None) -> Path | None:
     ordered = sorted(videos, key=lambda p: p.name)
     if not ordered:
@@ -87,7 +103,12 @@ def next_video(videos: Sequence[Path], current: Path | None) -> Path | None:
 
 
 def find_subtitles(video: Path) -> Path | None:
-    for candidate in sorted(video.parent.glob(video.stem + ".*")):
-        if candidate.suffix.lower() in SUBTITLE_TYPES:
+    """Fichier de sous-titres voisin (`film.srt`, `film.fr.ass`…) ; sans glob : `[`, `*`, `?` sont courants dans les noms."""
+    try:
+        siblings = sorted(video.parent.iterdir())
+    except OSError:
+        return None
+    for candidate in siblings:
+        if candidate.name.startswith(video.stem + ".") and candidate.suffix.lower() in SUBTITLE_TYPES:
             return candidate
     return None
