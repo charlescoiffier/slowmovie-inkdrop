@@ -44,6 +44,10 @@ class FakeLibrary:
     def ready(self):
         return list(self.videos)
 
+    def rows(self):
+        return [{"name": v.name, "status": "ready", "frames": INFO.frame_count, "duration": INFO.duration,
+                 "fps": INFO.fps, "subtitle_codecs": [], "error": ""} for v in self.videos]
+
 
 def png_bytes(size=(60, 40), color="blue") -> bytes:
     buf = io.BytesIO()

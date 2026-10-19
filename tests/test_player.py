@@ -1,8 +1,10 @@
 import json
 from datetime import datetime
 
+import pytest
 from conftest import png_bytes
 
+from slowmovie_inkdrop.config import Settings
 from slowmovie_inkdrop.videos import read_progress, write_progress
 
 A, B = "a" * 32, "b" * 32
@@ -287,3 +289,131 @@ def test_overlong_caption_from_the_queue_is_cut_to_the_setting(make_player):
     short.player.tick()
     from PIL import ImageChops
     assert ImageChops.difference(ctx.display.shown[-1], short.display.shown[-1]).getbbox() is None
+
+
+def test_first_play_starts_at_the_film_start_point(make_player):
+    ctx = make_player()
+    ctx.player.starts.set("a.mp4", 10)            # 10 s à 24 i/s = image 240
+    ctx.player.tick()
+    assert ctx.frames.calls == [("a.mp4", 240)]
+
+
+def test_saved_progress_wins_over_the_start_point(make_player, tmp_path):
+    (tmp_path / "progress").mkdir(exist_ok=True)
+    write_progress(tmp_path / "progress", tmp_path / "Videos" / "a.mp4", 500)
+    ctx = make_player()
+    ctx.player.starts.set("a.mp4", 10)
+    ctx.player.tick()
+    assert ctx.frames.calls == [("a.mp4", 500)]
+
+
+def test_set_start_does_not_move_a_film_already_started(make_player):
+    ctx = make_player()
+    ctx.player.tick()                                           # image 0 affichée, progression = 4
+    fut = ctx.player.submit({"cmd": "set_start", "video": "a.mp4", "seconds": 30})
+    ctx.player.tick()
+    assert fut.result(timeout=1) == {"ok": True}
+    assert ctx.player.starts.get("a.mp4") == 30
+    assert ctx.player.frame == 4 and read_progress(ctx.paths.progress, ctx.library.videos[0]) == 4
+
+
+def test_set_start_beyond_the_film_is_refused(make_player):
+    ctx = make_player()
+    fut = ctx.player.submit({"cmd": "set_start", "video": "a.mp4", "seconds": 5000})   # durée 100 s
+    ctx.player.tick()
+    assert fut.result(timeout=1)["ok"] is False and ctx.player.starts.get("a.mp4") == 0.0
+
+
+def test_seek_jumps_now_and_is_saved(make_player):
+    ctx = make_player()
+    ctx.player.tick()
+    fut = ctx.player.submit({"cmd": "seek", "video": "a.mp4", "seconds": 20})
+    ctx.player.tick()
+    assert fut.result(timeout=1) == {"ok": True}
+    assert ctx.frames.calls[-1] == ("a.mp4", 480)
+    assert read_progress(ctx.paths.progress, ctx.library.videos[0]) == 484
+
+
+def test_seek_past_the_end_is_clamped(make_player):
+    ctx = make_player()
+    ctx.player.tick()
+    ctx.player.submit({"cmd": "seek", "video": "a.mp4", "seconds": 5000})
+    ctx.player.tick()
+    assert ctx.frames.calls[-1] == ("a.mp4", 1000)
+
+
+def test_seek_on_another_film_only_moves_its_saved_position(make_player):
+    ctx = make_player(videos=("a.mp4", "b.mp4"))
+    ctx.player.tick()
+    ctx.player.submit({"cmd": "seek", "video": "b.mp4", "seconds": 10})
+    ctx.player.tick()
+    assert read_progress(ctx.paths.progress, ctx.library.videos[1]) == 240
+    assert ctx.player.video.name == "a.mp4" and ctx.frames.calls[-1][0] == "a.mp4"
+
+
+def test_seek_unknown_film_is_refused(make_player):
+    ctx = make_player()
+    fut = ctx.player.submit({"cmd": "seek", "video": "inconnu.mp4", "seconds": 10})
+    ctx.player.tick()
+    assert fut.result(timeout=1)["ok"] is False
+
+
+def test_reset_goes_back_to_the_start_point(make_player):
+    ctx = make_player()
+    ctx.player.starts.set("a.mp4", 10)
+    ctx.player.tick()
+    ctx.player.submit({"cmd": "seek", "video": "a.mp4", "seconds": 20})
+    ctx.player.tick()
+    assert ctx.frames.calls[-1] == ("a.mp4", 480)
+    fut = ctx.player.submit({"cmd": "reset", "video": "a.mp4"})
+    ctx.player.tick()
+    assert fut.result(timeout=1) == {"ok": True}
+    assert ctx.frames.calls[-1] == ("a.mp4", 240)
+
+
+def test_loop_restart_uses_the_start_point(make_player, tmp_path):
+    (tmp_path / "progress").mkdir(exist_ok=True)
+    write_progress(tmp_path / "progress", tmp_path / "Videos" / "a.mp4", 998)
+    ctx = make_player(loop=True)
+    ctx.player.starts.set("a.mp4", 10)
+    ctx.player.tick()                                            # affiche 998, dépasse la fin, repart au départ
+    assert read_progress(ctx.paths.progress, ctx.library.videos[0]) == 240
+
+
+def test_next_film_starts_at_its_own_start_point(make_player, tmp_path):
+    (tmp_path / "progress").mkdir(exist_ok=True)
+    write_progress(tmp_path / "progress", tmp_path / "Videos" / "a.mp4", 998)
+    ctx = make_player(videos=("a.mp4", "b.mp4"))
+    ctx.player.starts.set("b.mp4", 5)
+    ctx.player.tick()
+    assert ctx.paths.now_playing.read_text().endswith("b.mp4")
+    assert read_progress(ctx.paths.progress, tmp_path / "Videos" / "b.mp4") == 120
+
+
+def test_remote_settings_change_is_validated_saved_and_applied(make_player):
+    ctx = make_player()
+    ctx.paths.conf.write_text("relay-token = secret\ndelay = 40\n")
+    fut = ctx.player.submit({"cmd": "settings", "changes": {
+        "delay": 10, "fullscreen": True, "contrast": 1.5, "active_hours": "08:00-22:00", "queue_max": 3}})
+    ctx.player.tick()
+    assert fut.result(timeout=1) == {"ok": True}
+    saved = Settings.load(ctx.paths.conf)
+    assert (saved.delay, saved.fullscreen, saved.contrast, saved.active_hours) == (10, True, 1.5, "08:00-22:00")
+    assert saved.relay_token == "secret"                          # les réglages non touchés sont conservés
+    assert ctx.player.settings.delay == 10 and ctx.queue.max_items == 3
+
+
+@pytest.mark.parametrize("changes", [
+    {"relay_url": "https://evil"}, {"relay_token": "x"}, {"epd": "x"}, {"directory": "/"},
+    {"delay": "10"}, {"delay": True}, {"delay": 0}, {"delay": 1.5}, {"fullscreen": 1}, {"contrast": 9},
+    {"active_hours": "n'importe quoi"}, {"relay_poll_seconds": 1000}, {}, {"subtitle_track": -1},
+    {"min_image_seconds": 500, "max_image_seconds": 100},
+])
+def test_invalid_remote_settings_are_refused_and_nothing_is_written(make_player, changes):
+    ctx = make_player()
+    ctx.paths.conf.write_text("delay = 40\n")
+    before = ctx.paths.conf.read_text()
+    fut = ctx.player.submit({"cmd": "settings", "changes": changes})
+    ctx.player.tick()
+    assert fut.result(timeout=1)["ok"] is False
+    assert ctx.paths.conf.read_text() == before and ctx.player.settings.delay == 120

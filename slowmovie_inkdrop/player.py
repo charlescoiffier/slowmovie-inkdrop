@@ -20,7 +20,9 @@ from .config import Paths, Settings, in_active_hours
 from .display import Display
 from .image_queue import ImageQueue, QueuedImage
 from .imaging import clean_caption, draw_caption, to_panel
-from .videos import VideoInfo, next_video, probe_video, read_progress, write_progress
+from .remote import check_setting_value
+from .starts import StartPoints, seconds_to_frame
+from .videos import VideoInfo, has_progress, next_video, probe_video, read_progress, write_progress
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +44,8 @@ class Player:
     def __init__(self, *, paths: Paths, settings: Settings, display: Display, frames: FrameSource,
                  image_queue: ImageQueue, library, clock: Callable[[], float] = time.time,
                  rng: random.Random | None = None, probe=probe_video,
-                 on_done: Callable[[QueuedImage, str], None] | None = None):
+                 on_done: Callable[[QueuedImage, str], None] | None = None,
+                 starts: StartPoints | None = None):
         self.paths, self.settings, self.display = paths, settings, display
         self.frames, self.queue, self.library = frames, image_queue, library
         self.clock, self.rng, self.probe, self.on_done = clock, rng or random.Random(), probe, on_done
@@ -59,6 +62,7 @@ class Player:
         self._commands: SimpleQueue = SimpleQueue()
         self._infos: dict[Path, VideoInfo] = {}
         self._start_pending = settings.start > 0
+        self.starts = starts or StartPoints(paths.starts)
         self._restore()
 
     # -- démarrage -------------------------------------------------------
@@ -167,14 +171,28 @@ class Player:
             pass
         return videos[0]
 
-    def _load_video(self, video: Path) -> None:
+    def _info(self, video: Path) -> VideoInfo:
         info = self._infos.get(video) or self.probe(video)
         self._infos[video] = info
+        return info
+
+    def _start_frame(self, video: Path) -> int:
+        info = self._info(video)
+        return seconds_to_frame(self.starts.get(video.name), info.fps, info.frame_count)
+
+    def _ready_video(self, name) -> Path | None:
+        return next((v for v in self.library.ready() if v.name == name), None)
+
+    def _load_video(self, video: Path) -> None:
+        info = self._info(video)
         self.video, self.info = video, info
         if self.settings.random_frames:
             self.frame = 0
         else:
-            frame = read_progress(self.paths.progress, video)
+            if has_progress(self.paths.progress, video):
+                frame = read_progress(self.paths.progress, video)
+            else:
+                frame = seconds_to_frame(self.starts.get(video.name), info.fps, info.frame_count)
             if self._start_pending:
                 frame, self._start_pending = self.settings.start, False
             self.frame = int(_clamp(frame, 0, info.frame_count))
@@ -235,7 +253,7 @@ class Player:
                     following = (self.rng.choice(videos) if s.random_file
                                  else next_video(videos, self.video))
                     self._load_video(following)
-                self.frame = 0
+                self.frame = self._start_frame(self.video)
             write_progress(self.paths.progress, self.video, self.frame)
         except (OSError, ValueError) as exc:
             self.error = f"Film suivant illisible : {exc}"
@@ -280,13 +298,27 @@ class Player:
             self.settings = Settings.load(self.paths.conf)
             self.queue.max_items = self.settings.queue_max
             self.queue.expiry_seconds = self.settings.queue_expiry_seconds
-        elif name == "reset":
-            target = next((v for v in self.library.ready() if v.name == cmd.get("video")), None)
+        elif name in ("seek", "set_start", "reset"):
+            target = self._ready_video(cmd.get("video"))
             if target is None:
-                return {"ok": False, "error": "film introuvable"}
-            write_progress(self.paths.progress, target, 0)
-            if target == self.video:
-                self.frame = 0
+                return {"ok": False, "error": "film introuvable ou pas encore prêt"}
+            info = self._info(target)
+            if name == "set_start":
+                seconds = float(cmd.get("seconds", 0))
+                if not 0 <= seconds <= info.duration:
+                    return {"ok": False, "error": "le point de départ dépasse la durée du film"}
+                self.starts.set(target.name, seconds)
+            else:
+                if name == "seek":
+                    frame = seconds_to_frame(float(cmd.get("seconds", 0)), info.fps, info.frame_count)
+                else:
+                    frame = self._start_frame(target)
+                write_progress(self.paths.progress, target, frame)
+                if target == self.video:
+                    self.frame = frame
+                    self.next_frame_at = 0.0
+        elif name == "settings":
+            return self._apply_remote_settings(cmd.get("changes"))
         elif name == "queue_remove":
             item = self.queue.remove(str(cmd.get("id", "")))
             if item is None:
@@ -298,6 +330,25 @@ class Player:
         else:
             return {"ok": False, "error": f"commande inconnue : {name}"}
         self._write_state(self.clock())
+        return {"ok": True}
+
+    def _apply_remote_settings(self, changes) -> dict:
+        if not isinstance(changes, dict) or not changes:
+            return {"ok": False, "error": "aucun réglage à modifier"}
+        try:
+            checked = {n: check_setting_value(n, v) for n, v in changes.items()}
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        new = Settings.load(self.paths.conf)
+        for name, value in checked.items():
+            setattr(new, name, value)
+        problems = new.problems()
+        if problems:
+            return {"ok": False, "error": f"{problems[0][0]} {problems[0][1]}"}
+        new.save(self.paths.conf)
+        self.settings = new
+        self.queue.max_items = new.queue_max
+        self.queue.expiry_seconds = new.queue_expiry_seconds
         return {"ok": True}
 
     # -- état ------------------------------------------------------------
