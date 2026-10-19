@@ -28,7 +28,7 @@ def _client_target() -> tuple[str, str, str]:
 
 
 def build_rsync_command(file: Path, host: str, user: str, remote_dir: str) -> list[str]:
-    return ["rsync", "-a", "--partial", "--progress", str(file),
+    return ["rsync", "-a", "--partial-dir=.rsync-partial", "--progress", str(file),
             f"{user}@{host}:{remote_dir.rstrip('/')}/Videos/"]
 
 

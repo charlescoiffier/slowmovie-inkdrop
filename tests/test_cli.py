@@ -7,7 +7,7 @@ from slowmovie_inkdrop import cli
 def test_rsync_command_targets_videos_dir():
     cmd = cli.build_rsync_command(Path("/tmp/mon film.mp4"), "slowmovie.local", "admin",
                                   "/home/admin/SlowMovie")
-    assert cmd[0] == "rsync" and "--partial" in cmd
+    assert cmd[0] == "rsync" and "--partial-dir=.rsync-partial" in cmd
     assert cmd[-1] == "admin@slowmovie.local:/home/admin/SlowMovie/Videos/"
     assert "/tmp/mon film.mp4" in cmd           # un seul argument, pas d'interprétation par un shell
 
@@ -94,3 +94,10 @@ def test_target_defaults_to_the_pi_hostname_and_can_be_overridden(monkeypatch):
     assert cli._client_target() == ("slomovpi.local", "admin", "/home/admin/SlowMovie")
     monkeypatch.setenv("SLOWMOVIE_HOST", "192.168.1.50")
     assert cli._client_target()[0] == "192.168.1.50"
+
+
+def test_interrupted_copy_never_leaves_a_partial_file_under_the_final_name():
+    # un transfert coupé ne doit pas laisser un film tronqué que le Pi prendrait pour complet
+    cmd = cli.build_rsync_command(Path("/tmp/f.mkv"), "slomovpi.local", "admin", "/home/admin/SlowMovie")
+    assert "--partial-dir=.rsync-partial" in cmd
+    assert "--partial" not in cmd
