@@ -150,17 +150,18 @@ class CommandLog:
             return self._read()
 
 
-def apply_remote_command(player, command) -> dict:
-    """Revalide la commande puis la fait appliquer par le lecteur. Ne lève jamais."""
+def apply_remote_command(player, command, timeout: float = 60) -> dict:
+    """Revalide la commande puis la fait appliquer par le lecteur. Ne lève pas d'exception."""
     try:
         cmd = validate_command(command)
     except ValueError as exc:
         return {"status": "failed", "message": str(exc)}
     payload = {"cmd": cmd.pop("kind"), **cmd}
     try:
-        reply = player.submit(payload).result(timeout=60)
-    except Exception as exc:  # noqa: BLE001
-        return {"status": "failed", "message": f"le lecteur n'a pas répondu : {exc}"}
+        reply = player.submit(payload).result(timeout=timeout)
+    except Exception:  # noqa: BLE001
+        return {"status": "failed", "message": "le lecteur n'a pas répondu à temps : résultat inconnu "
+                                              "(la commande sera peut-être appliquée plus tard)"}
     if reply.get("ok"):
         return {"status": "applied", "message": ""}
     return {"status": "failed", "message": str(reply.get("error", "échec"))[:300]}
@@ -186,6 +187,8 @@ def sync_control(client: RelayClient, player, log: CommandLog, now: float) -> st
             command_id = str(item.get("id", ""))
             if log.get(command_id) is not None:
                 continue                                    # déjà appliquée : son accusé est réessayé ci-dessus
+            # noté AVANT d'appliquer : une coupure en plein milieu ne doit jamais rejouer la commande
+            log.put(command_id, "failed", "interrompue par un redémarrage du Pi : résultat inconnu")
             result = apply_remote_command(player, item.get("command"))
             log.put(command_id, result["status"], result["message"])
             _ack(client, log, command_id, result["status"], result["message"])

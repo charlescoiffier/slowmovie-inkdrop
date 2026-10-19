@@ -73,6 +73,7 @@
       <input id="admin-password" type="password" autocomplete="current-password">
       <div class="row"><button id="admin-login-button" type="button">Se connecter</button></div>
     </div>
+    <div id="admin-status"></div>
     <div id="admin-main" hidden></div>
   </section>
 </main>
@@ -151,6 +152,7 @@ const SETTINGS = [
 ];
 const XRW = { "X-Requested-With": "slowmovie" };
 let timer = null;
+let dirty = false;      // une saisie est en cours : on ne reconstruit pas les champs sous les doigts de l'utilisateur
 
 async function api(path, options = {}) {
   const headers = { ...XRW, ...(options.body ? { "Content-Type": "application/json" } : {}) };
@@ -189,7 +191,7 @@ async function send(command, label) {
   for (let i = 0; i < 100; i++) {
     await new Promise((res) => setTimeout(res, 3000));
     const s = await api("/api/admin/commands/" + r.body.id);
-    if (s.body.status === "applied") { say("admin-msg", `${label} : appliqué.`, "ok"); return refresh(); }
+    if (s.body.status === "applied") { say("admin-msg", `${label} : appliqué.`, "ok"); return refresh(true); }
     if (s.body.status === "failed") return say("admin-msg", `${label} : refusé par le Pi — ${s.body.message || "échec"}`, "err");
     if (s.body.status === "expired") return say("admin-msg", `${label} : le Pi n'a pas répondu à temps.`, "err");
   }
@@ -244,12 +246,10 @@ function settingsForm(values) {
   return form;
 }
 
-function render(data) {
-  const root = $("admin-main");
+function render(data, force) {
   const state = data.state;
-  const children = [];
   const ago = data.last_seen_seconds === null ? "jamais" : `il y a ${data.last_seen_seconds} s`;
-  children.push(el("div", { className: "card" },
+  const statusCard = el("div", { className: "card" },
     el("div", { className: "row" }, el("span", { className: "dot" + (data.online ? " on" : "") }),
       el("strong", { text: data.online ? "Pi en ligne" : "Pi hors ligne" }), el("span", { className: "muted hint", text: `dernier contact : ${ago}` })),
     state ? el("div", { text: `${state.paused ? "En pause" : state.mode === "IMAGE" ? "Image envoyée affichée" : "Lecture"} · ${state.video || "aucun film"} · ${fmt(state.position_seconds)} / ${fmt(state.duration_seconds)}` }) : el("div", { className: "muted", text: "Aucun état reçu pour l'instant." }),
@@ -257,7 +257,11 @@ function render(data) {
     el("div", { className: "row" },
       el("button", { type: "button", className: "plain", onclick: () => send({ kind: state && state.paused ? "resume" : "pause" }, state && state.paused ? "Reprise" : "Pause"), text: state && state.paused ? "Reprendre" : "Pause" }),
       el("button", { type: "button", className: "plain", onclick: () => send({ kind: "skip" }, "Passer"), text: "Passer" }),
-      el("button", { type: "button", className: "plain", onclick: logout, text: "Se déconnecter" }))));
+      el("button", { type: "button", className: "plain", onclick: logout, text: "Se déconnecter" })));
+  $("admin-status").replaceChildren(statusCard);
+  const typing = $("admin-main").contains(document.activeElement) && document.activeElement.tagName === "INPUT";
+  if (!force && (dirty || typing)) return;
+  const children = [];
   if (state) {
     children.push(el("h2", { text: "Films" }));
     const list = el("div", { className: "card" });
@@ -271,17 +275,18 @@ function render(data) {
       children.push(q);
     }
   }
-  root.replaceChildren(...children);
+  $("admin-main").replaceChildren(...children);
+  dirty = false;
 }
 
-async function refresh() {
+async function refresh(force = false) {
   const r = await api("/api/admin/state");
   if (r.status === 401 || r.status === 403) return showLogin();
   if (!r.ok) return say("admin-msg", r.body.detail || "Erreur " + r.status, "err");
   $("admin-login").hidden = true; $("admin-main").hidden = false;
-  render(r.body);
+  render(r.body, force);
 }
-function showLogin() { $("admin-login").hidden = false; $("admin-main").hidden = true; }
+function showLogin() { $("admin-login").hidden = false; $("admin-main").hidden = true; $("admin-status").replaceChildren(); }
 function adminStart() { refresh(); adminStop(); timer = setInterval(() => { if (!document.hidden && !$("panel-admin").hidden) refresh(); }, 5000); }
 function adminStop() { if (timer) clearInterval(timer); timer = null; }
 async function logout() { await api("/api/admin/logout", { method: "POST" }); showLogin(); say("admin-msg", "Déconnecté.", "ok"); }
@@ -292,6 +297,7 @@ $("admin-login-button").addEventListener("click", async () => {
   say("admin-msg", "");
   refresh();
 });
+$("admin-main").addEventListener("input", () => { dirty = true; });
 $("admin-password").addEventListener("keydown", (e) => { if (e.key === "Enter") $("admin-login-button").click(); });
 </script>
 </body>

@@ -45,3 +45,10 @@ def test_the_admin_tab_is_hidden_until_the_relay_says_it_is_enabled(client):
     html = client.get("/").text
     assert re.search(r'id="tab-admin"[^>]*hidden', html)
     assert "c.admin" in html
+
+
+def test_the_admin_refresh_does_not_wipe_what_the_user_is_typing(client):
+    html = client.get("/").text
+    scripts = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+    assert 'id="admin-status"' in html                     # la barre d'état se rafraîchit seule
+    assert "dirty" in scripts and "document.activeElement" in scripts

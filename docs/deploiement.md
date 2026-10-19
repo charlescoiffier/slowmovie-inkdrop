@@ -166,6 +166,10 @@ puis la page indique « appliqué » ou le motif du refus.
 **Sous-titres** : `subtitles = true` lit le fichier `.srt/.ass/.ssa` voisin s'il existe, sinon la piste intégrée au film
 (`subtitle-track`, numéro parmi tous les flux de sous-titres, 0 par défaut). Seuls les sous-titres **texte** sont pris en
 charge ; les sous-titres image (PGS, VobSub) sont ignorés.
+La piste intégrée est **extraite une seule fois** dans `~/SlowMovie/subtitles/` (en tâche de fond : sur un gros film
+sur un Pi Zero 2 W, comptez quelques minutes) ; les images affichées pendant ce temps partent sans sous-titres. Sans
+cette extraction, chaque image mettrait près de 2 minutes (mesuré : 22 s sans sous-titres, 1 min 52 avec, pour un tiers du
+film Kaguya).
 
 **Point de départ** : il s'applique à la première lecture d'un film, à « Revenir au départ » et quand le film recommence
 en boucle ; il ne déplace pas un film déjà commencé. « Aller à » saute à un timecode tout de suite. Dans la TUI :

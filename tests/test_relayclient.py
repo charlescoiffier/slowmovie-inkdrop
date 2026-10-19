@@ -309,3 +309,37 @@ def test_sync_control_never_raises_when_the_relay_is_down(tmp_path):
 def test_command_log_survives_restart(tmp_path):
     CommandLog(tmp_path / "c.json").put(C, "failed", "raison")
     assert CommandLog(tmp_path / "c.json").pending() == {C: {"status": "failed", "message": "raison"}}
+
+
+def test_a_command_that_times_out_is_reported_with_an_unknown_result():
+    class Busy:
+        def submit(self, cmd):
+            return Future()                                    # le lecteur est occupé : jamais de réponse
+
+    result = apply_remote_command(Busy(), {"kind": "pause"}, timeout=0.05)
+    assert result["status"] == "failed" and "inconnu" in result["message"]
+
+
+def test_a_crash_between_applying_and_logging_never_replays_the_command(tmp_path):
+    relay = ControlRelay([{"id": A, "command": {"kind": "seek", "video": "a.mkv", "seconds": 10}}])
+    log = CommandLog(tmp_path / "commands.json")
+
+    class Crashing:
+        received = []
+
+        def remote_snapshot(self, now):
+            return {}
+
+        def submit(self, cmd):
+            raise KeyboardInterrupt                            # coupure en plein milieu de l'application
+
+    try:
+        sync_control(relay.client(), Crashing(), log, now=1.0)
+    except KeyboardInterrupt:
+        pass
+    assert A in log.pending()                                  # la commande est déjà notée « interrompue »
+    player = FakePlayer()
+    sync_control(relay.client(), player, log, now=2.0)         # après le redémarrage : le relais la propose encore
+    assert player.received == []                               # jamais rejouée
+    assert relay.acks[-1][0] == A and relay.acks[-1][1]["status"] == "failed"
+    assert "interrompue" in relay.acks[-1][1]["message"]

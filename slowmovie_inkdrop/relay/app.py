@@ -30,10 +30,6 @@ class Ack(BaseModel):
     status: str
 
 
-class Login(BaseModel):
-    password: str = ""
-
-
 class CommandAck(BaseModel):
     status: str
     message: str = ""
@@ -98,7 +94,9 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
         if stored is None:
             return None, None, False
         state, received = stored
-        return state, received, clock() - received < 60
+        poll = ((state.get("settings") or {}).get("relay_poll_seconds") if isinstance(state, dict) else None)
+        interval = poll if isinstance(poll, int) and not isinstance(poll, bool) and 5 <= poll <= 300 else 20
+        return state, received, clock() - received < max(60, 3 * interval)
 
     def check_id(image_id: str) -> str:
         if not _ID.fullmatch(image_id):
@@ -213,7 +211,7 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
 
     # -- administrateur ----------------------------------------------------
     @app.post("/api/admin/login")
-    def admin_login(request: Request, body: Login) -> JSONResponse:
+    async def admin_login(request: Request) -> JSONResponse:
         if not admin_enabled:
             raise HTTPException(503, "Administration désactivée.")
         if request.headers.get(CSRF_HEADER) != "slowmovie":
@@ -222,7 +220,11 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
         wait = admin_limiter.blocked(ip)
         if wait > 0:
             raise HTTPException(429, f"Trop d'essais. Réessayez dans {int(wait // 60) + 1} minute(s).")
-        if not verify_password(body.password, config.admin_password_hash):
+        data = await read_json(request, 1024)
+        password = data.get("password") if isinstance(data, dict) else None
+        if not isinstance(password, str):
+            password = ""
+        if not verify_password(password, config.admin_password_hash):
             admin_limiter.fail(ip)
             log.warning("connexion administrateur refusée depuis %s", ip)
             raise HTTPException(401, "Mot de passe administrateur incorrect.")

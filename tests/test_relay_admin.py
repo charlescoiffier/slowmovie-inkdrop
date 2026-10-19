@@ -277,3 +277,39 @@ def test_the_admin_state_lists_recent_commands(env):
     for _ in range(3):
         command(client, {"kind": "pause"})
     assert len(client.get("/api/admin/state", headers=XRW).json()["commands"]) == 3
+
+
+def test_online_threshold_follows_the_poll_interval_the_pi_reports(env):
+    client, clock, _ = logged_in(env)
+    slow = dict(STATE, settings={"relay_poll_seconds": 120})
+    put_state(client, slow)
+    clock.t += 200                                              # moins de 3 intervalles : toujours en ligne
+    assert client.get("/api/admin/state", headers=XRW).json()["online"] is True
+    clock.t += 200                                              # 400 s sans nouvelles : hors ligne
+    assert client.get("/api/admin/state", headers=XRW).json()["online"] is False
+
+
+@pytest.mark.parametrize("poll", ["x", None, -5, 10**9, 2, True])
+def test_a_garbage_poll_interval_falls_back_to_the_default_threshold(env, poll):
+    client, clock, _ = logged_in(env)
+    put_state(client, dict(STATE, settings={"relay_poll_seconds": poll}))
+    clock.t += 61
+    assert client.get("/api/admin/state", headers=XRW).json()["online"] is False
+
+
+def test_login_refuses_oversized_bodies_even_when_chunked(env):
+    client, *_ = env
+    big = json.dumps({"password": "x" * 5000}).encode()
+    assert client.post("/api/admin/login", content=big, headers={**XRW, "content-type": "application/json"}
+                       ).status_code == 413
+    chunked = client.post("/api/admin/login", content=iter([big[:2000], big[2000:]]),
+                          headers={**XRW, "content-type": "application/json"})
+    assert chunked.status_code == 413
+    assert login(client).status_code == 200                      # un corps normal passe toujours
+
+
+@pytest.mark.parametrize("content", ["pas du json", "[1]", "null", '{"password": 5}', '{"password": null}', ""])
+def test_login_with_a_malformed_body_is_refused_not_crashed(env, content):
+    client, *_ = env
+    r = client.post("/api/admin/login", content=content, headers={**XRW, "content-type": "application/json"})
+    assert r.status_code in (401, 422)

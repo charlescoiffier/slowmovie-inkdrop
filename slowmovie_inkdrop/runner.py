@@ -49,7 +49,7 @@ def run(base: Path) -> int:
     queue = ImageQueue(paths.queue_dir, settings.queue_max, settings.queue_expiry_seconds)
     outbox = AckOutbox(paths.acks)
     command_log = CommandLog(paths.commands)
-    player = Player(paths=paths, settings=settings, display=display, frames=FfmpegFrameSource(),
+    player = Player(paths=paths, settings=settings, display=display, frames=FfmpegFrameSource(cache_dir=paths.base / "subtitles"),
                     image_queue=queue, library=library,
                     on_done=lambda item, status: outbox.add(item.id, status))
     stop = threading.Event()
