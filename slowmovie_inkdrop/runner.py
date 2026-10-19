@@ -14,7 +14,7 @@ from .framesource import FfmpegFrameSource
 from .image_queue import ImageQueue
 from .library import Library
 from .player import Player
-from .relayclient import AckOutbox, relay_loop
+from .relayclient import AckOutbox, CommandLog, relay_loop
 from .videos import probe_video
 
 log = logging.getLogger("slowmovie")
@@ -48,6 +48,7 @@ def run(base: Path) -> int:
     library.poll(time.time())
     queue = ImageQueue(paths.queue_dir, settings.queue_max, settings.queue_expiry_seconds)
     outbox = AckOutbox(paths.acks)
+    command_log = CommandLog(paths.commands)
     player = Player(paths=paths, settings=settings, display=display, frames=FfmpegFrameSource(),
                     image_queue=queue, library=library,
                     on_done=lambda item, status: outbox.add(item.id, status))
@@ -63,7 +64,7 @@ def run(base: Path) -> int:
     control = ControlServer(player, paths.socket)
     control.start()
     threading.Thread(target=_library_loop, args=(library, stop), daemon=True).start()
-    threading.Thread(target=relay_loop, args=(player, queue, outbox, stop, time.time),
+    threading.Thread(target=relay_loop, args=(player, queue, outbox, stop, time.time, command_log),
                      daemon=True).start()
     log.info("slowmovie démarré (%s)", base)
     try:

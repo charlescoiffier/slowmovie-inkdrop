@@ -1,12 +1,20 @@
 import io
 import json
+from concurrent.futures import Future
 
 import httpx
 from PIL import Image
 
 from slowmovie_inkdrop.config import Settings
 from slowmovie_inkdrop.image_queue import ImageQueue
-from slowmovie_inkdrop.relayclient import AckOutbox, RelayClient, sync_cycle
+from slowmovie_inkdrop.relayclient import (
+    AckOutbox,
+    CommandLog,
+    RelayClient,
+    apply_remote_command,
+    sync_control,
+    sync_cycle,
+)
 
 A, B, C = "a" * 32, "b" * 32, "c" * 32
 
@@ -177,3 +185,127 @@ def test_missing_caption_field_means_no_caption(tmp_path):
     queue, outbox = make(tmp_path)
     sync_cycle(relay.client(), queue, outbox, Settings(), now=1)
     assert queue.items()[0].caption == ""
+
+
+class FakePlayer:
+    """Lecteur factice : enregistre les commandes reçues et répond comme le vrai."""
+
+    def __init__(self, replies=None):
+        self.received = []
+        self.replies = replies or {}
+
+    def remote_snapshot(self, now):
+        return {"sent_at": now, "mode": "FILM", "films": [], "settings": {"delay": 40}}
+
+    def submit(self, cmd):
+        self.received.append(cmd)
+        future = Future()
+        future.set_result(self.replies.get(cmd["cmd"], {"ok": True}))
+        return future
+
+
+class ControlRelay:
+    """Relais factice côté pilotage."""
+
+    def __init__(self, commands=None):
+        self.commands = commands or []
+        self.states = []
+        self.acks = []
+        self.ack_codes = {}
+        self.down = False
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        if self.down:
+            raise httpx.ConnectError("relais éteint")
+        assert request.headers["authorization"] == "Bearer jeton"
+        path = request.url.path
+        if path == "/api/device/state" and request.method == "PUT":
+            self.states.append(json.loads(request.content))
+            return httpx.Response(200, json={"ok": True})
+        if path == "/api/device/commands":
+            return httpx.Response(200, json=self.commands)
+        if path.startswith("/api/device/commands/") and path.endswith("/ack"):
+            cid = path.split("/")[-2]
+            if cid in self.ack_codes:
+                return httpx.Response(self.ack_codes[cid], json={"detail": "x"})
+            self.acks.append((cid, json.loads(request.content)))
+            self.commands = [c for c in self.commands if c["id"] != cid]     # comme le vrai relais : plus proposée
+            return httpx.Response(200, json={"ok": True})
+        return httpx.Response(404)
+
+    def client(self) -> RelayClient:
+        return RelayClient("https://relais.test", "jeton",
+                           client=httpx.Client(transport=httpx.MockTransport(self.handler)))
+
+
+def test_apply_remote_command_translates_and_reports():
+    player = FakePlayer()
+    assert apply_remote_command(player, {"kind": "play", "video": "a.mkv"}) == {"status": "applied", "message": ""}
+    assert player.received == [{"cmd": "play", "video": "a.mkv"}]
+
+
+def test_apply_remote_command_revalidates_everything():
+    player = FakePlayer()
+    for bad in ({"kind": "settings", "changes": {"relay_url": "https://evil"}}, {"kind": "play", "video": "../x"},
+                {"kind": "dance"}, "n'importe quoi", None):
+        result = apply_remote_command(player, bad)
+        assert result["status"] == "failed" and result["message"]
+    assert player.received == []                                       # rien n'a atteint le lecteur
+
+
+def test_apply_remote_command_reports_a_refusal_from_the_player():
+    player = FakePlayer({"play": {"ok": False, "error": "film introuvable ou pas encore prêt"}})
+    assert apply_remote_command(player, {"kind": "play", "video": "a.mkv"}) == {
+        "status": "failed", "message": "film introuvable ou pas encore prêt"}
+
+
+def test_sync_control_applies_new_commands_acks_them_and_sends_the_state(tmp_path):
+    relay = ControlRelay([{"id": A, "command": {"kind": "pause"}}, {"id": B, "command": {"kind": "skip"}}])
+    player, log = FakePlayer(), CommandLog(tmp_path / "commands.json")
+    status = sync_control(relay.client(), player, log, now=5.0)
+    assert [c["cmd"] for c in player.received] == ["pause", "skip"]
+    assert [a[0] for a in relay.acks] == [A, B] and relay.acks[0][1]["status"] == "applied"
+    assert relay.states and relay.states[0]["settings"] == {"delay": 40}
+    assert log.pending() == {} and "2" in status
+
+
+def test_a_command_offered_again_is_never_applied_twice(tmp_path):
+    relay = ControlRelay([{"id": A, "command": {"kind": "pause"}}])
+    relay.ack_codes[A] = 500                                           # l'accusé n'arrive pas
+    player, log = FakePlayer(), CommandLog(tmp_path / "commands.json")
+    sync_control(relay.client(), player, log, now=1.0)
+    sync_control(relay.client(), player, log, now=2.0)
+    assert len(player.received) == 1                                    # appliquée une seule fois
+    relay.ack_codes.clear()
+    sync_control(relay.client(), player, log, now=3.0)
+    assert relay.acks[-1][0] == A and log.pending() == {} and len(player.received) == 1
+
+
+def test_an_ack_for_a_command_the_relay_forgot_is_dropped(tmp_path):
+    relay = ControlRelay([])
+    relay.ack_codes[A] = 404
+    log = CommandLog(tmp_path / "commands.json")
+    log.put(A, "applied", "")
+    sync_control(relay.client(), FakePlayer(), log, now=1.0)
+    assert log.pending() == {}
+
+
+def test_a_failing_ack_does_not_stop_the_other_commands_or_the_state(tmp_path):
+    relay = ControlRelay([{"id": A, "command": {"kind": "pause"}}, {"id": B, "command": {"kind": "skip"}}])
+    relay.ack_codes[A] = 500
+    player, log = FakePlayer(), CommandLog(tmp_path / "commands.json")
+    sync_control(relay.client(), player, log, now=1.0)
+    assert [c["cmd"] for c in player.received] == ["pause", "skip"] and relay.states
+    assert [a[0] for a in relay.acks] == [B] and list(log.pending()) == [A]
+
+
+def test_sync_control_never_raises_when_the_relay_is_down(tmp_path):
+    relay = ControlRelay()
+    relay.down = True
+    status = sync_control(relay.client(), FakePlayer(), CommandLog(tmp_path / "c.json"), now=1.0)
+    assert "injoignable" in status
+
+
+def test_command_log_survives_restart(tmp_path):
+    CommandLog(tmp_path / "c.json").put(C, "failed", "raison")
+    assert CommandLog(tmp_path / "c.json").pending() == {C: {"status": "failed", "message": "raison"}}

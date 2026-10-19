@@ -15,6 +15,7 @@ from PIL import Image
 from .config import Settings
 from .image_queue import ImageQueue
 from .imaging import clean_caption
+from .remote import validate_command
 
 log = logging.getLogger(__name__)
 
@@ -67,6 +68,16 @@ class RelayClient:
     def ack(self, image_id: str, status: str) -> None:
         self._request("POST", f"/api/device/ack/{image_id}", json={"status": status})
 
+    def put_state(self, snapshot: dict) -> None:
+        self._request("PUT", "/api/device/state", json=snapshot)
+
+    def commands(self) -> list[dict]:
+        return self._request("GET", "/api/device/commands").json()
+
+    def ack_command(self, command_id: str, status: str, message: str = "") -> None:
+        self._request("POST", f"/api/device/commands/{command_id}/ack",
+                      json={"status": status, "message": message[:300]})
+
 
 class AckOutbox:
     """Accusés à envoyer au relais, conservés sur disque jusqu'à livraison."""
@@ -97,6 +108,96 @@ class AckOutbox:
     def done(self, image_id: str) -> None:
         with self._lock:
             self._write([e for e in self._read() if e["id"] != image_id])
+
+
+class CommandLog:
+    """Commandes déjà traitées dont l'accusé n'est pas confirmé : jamais rejouées, accusé réessayé."""
+
+    def __init__(self, path: Path):
+        self.path = Path(path)
+        self._lock = threading.Lock()
+
+    def _read(self) -> dict:
+        try:
+            data = json.loads(self.path.read_text())
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _write(self, data: dict) -> None:
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        tmp.write_text(json.dumps(data))
+        os.replace(tmp, self.path)
+
+    def get(self, command_id: str) -> dict | None:
+        with self._lock:
+            return self._read().get(command_id)
+
+    def put(self, command_id: str, status: str, message: str) -> None:
+        with self._lock:
+            data = self._read()
+            data[command_id] = {"status": status, "message": message}
+            self._write(data)
+
+    def done(self, command_id: str) -> None:
+        with self._lock:
+            data = self._read()
+            data.pop(command_id, None)
+            self._write(data)
+
+    def pending(self) -> dict:
+        with self._lock:
+            return self._read()
+
+
+def apply_remote_command(player, command) -> dict:
+    """Revalide la commande puis la fait appliquer par le lecteur. Ne lève jamais."""
+    try:
+        cmd = validate_command(command)
+    except ValueError as exc:
+        return {"status": "failed", "message": str(exc)}
+    payload = {"cmd": cmd.pop("kind"), **cmd}
+    try:
+        reply = player.submit(payload).result(timeout=60)
+    except Exception as exc:  # noqa: BLE001
+        return {"status": "failed", "message": f"le lecteur n'a pas répondu : {exc}"}
+    if reply.get("ok"):
+        return {"status": "applied", "message": ""}
+    return {"status": "failed", "message": str(reply.get("error", "échec"))[:300]}
+
+
+def _ack(client: RelayClient, log: CommandLog, command_id: str, status: str, message: str) -> None:
+    try:
+        client.ack_command(command_id, status, message)
+    except RelayError as exc:
+        if exc.status_code not in FORGOTTEN:
+            log.put(command_id, status, message)          # à réessayer au prochain tour
+            return
+    log.done(command_id)
+
+
+def sync_control(client: RelayClient, player, log: CommandLog, now: float) -> str:
+    """Un tour de pilotage : accusés en attente, nouvelles commandes, puis état. Ne lève jamais."""
+    try:
+        for command_id, entry in log.pending().items():
+            _ack(client, log, command_id, entry["status"], entry["message"])
+        applied = 0
+        for item in client.commands():
+            command_id = str(item.get("id", ""))
+            if log.get(command_id) is not None:
+                continue                                    # déjà appliquée : son accusé est réessayé ci-dessus
+            result = apply_remote_command(player, item.get("command"))
+            log.put(command_id, result["status"], result["message"])
+            _ack(client, log, command_id, result["status"], result["message"])
+            applied += 1
+        client.put_state(player.remote_snapshot(now))
+        return f"ok ({applied} commande(s))"
+    except RelayError as exc:
+        return str(exc)
+    except Exception as exc:  # noqa: BLE001
+        log_ = logging.getLogger(__name__)
+        log_.exception("pilotage du relais")
+        return f"erreur : {exc}"
 
 
 def sync_cycle(client: RelayClient, queue: ImageQueue, outbox: AckOutbox, settings: Settings,
@@ -150,7 +251,7 @@ def sync_cycle(client: RelayClient, queue: ImageQueue, outbox: AckOutbox, settin
 
 
 def relay_loop(player, queue: ImageQueue, outbox: AckOutbox, stop: threading.Event,
-               clock: Callable[[], float]) -> None:
+               clock: Callable[[], float], command_log: CommandLog | None = None) -> None:
     cached: tuple[tuple[str, str], RelayClient] | None = None
     while not stop.is_set():
         settings = player.settings
@@ -159,6 +260,10 @@ def relay_loop(player, queue: ImageQueue, outbox: AckOutbox, stop: threading.Eve
             if cached is None or cached[0] != key:
                 cached = (key, RelayClient(*key))
             player.relay_status = sync_cycle(cached[1], queue, outbox, settings, clock())
+            if command_log is not None:
+                control = sync_control(cached[1], player, command_log, clock())
+                if not control.startswith("ok"):
+                    player.relay_status = f"{player.relay_status} | {control}"
         else:
             player.relay_status = "relais non configuré"
         stop.wait(settings.relay_poll_seconds)

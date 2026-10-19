@@ -51,3 +51,43 @@ def test_caption_goes_from_the_upload_form_to_the_screen(make_player, tmp_path):
     ctx.player.tick()
     plain, captioned = ctx.display.shown[-2:]
     assert ImageChops.difference(plain, captioned).getbbox() is not None
+
+
+def test_admin_command_travels_from_the_web_to_the_player(make_player, tmp_path):
+    import threading
+
+    from slowmovie_inkdrop.relayclient import CommandLog, sync_control
+
+    config = RelayConfig(data_dir=tmp_path / "relay3", password_hash=hash_password("pw pw pw"),
+                         device_token="j" * 40, admin_password_hash=hash_password("admin pw pw"),
+                         session_secret="k" * 32)
+    web = TestClient(create_app(config), base_url="https://testserver")
+    xrw = {"X-Requested-With": "slowmovie"}
+    assert web.post("/api/admin/login", json={"password": "admin pw pw"}, headers=xrw).status_code == 200
+
+    ctx = make_player(videos=("a.mp4", "b.mp4"))
+    client = RelayClient("https://testserver", "j" * 40, client=web)
+    log = CommandLog(tmp_path / "commands3.json")
+    ctx.player.tick()
+    sync_control(client, ctx.player, log, ctx.clock())                      # 1er tour : envoie l'état du Pi
+    state = web.get("/api/admin/state", headers=xrw).json()
+    assert state["online"] and {f["name"] for f in state["state"]["films"]} == {"a.mp4", "b.mp4"}
+
+    first = web.post("/api/admin/commands", json={"kind": "play", "video": "b.mp4"}, headers=xrw).json()["id"]
+    second = web.post("/api/admin/commands", json={"kind": "settings", "changes": {"delay": 15}},
+                      headers=xrw).json()["id"]
+    refused = web.post("/api/admin/commands", json={"kind": "settings", "changes": {"relay_url": "x"}}, headers=xrw)
+    assert refused.status_code == 422
+
+    runner = threading.Thread(target=sync_control, args=(client, ctx.player, log, ctx.clock()))
+    runner.start()
+    for _ in range(200):                                                    # le lecteur traite les commandes dans tick()
+        ctx.player.tick()
+        if not runner.is_alive():
+            break
+        runner.join(timeout=0.02)
+    runner.join(timeout=5)
+    assert web.get(f"/api/admin/commands/{first}", headers=xrw).json()["status"] == "applied"
+    assert web.get(f"/api/admin/commands/{second}", headers=xrw).json()["status"] == "applied"
+    assert ctx.player.video.name == "b.mp4" and ctx.player.settings.delay == 15
+    assert Settings.load(ctx.paths.conf).delay == 15
