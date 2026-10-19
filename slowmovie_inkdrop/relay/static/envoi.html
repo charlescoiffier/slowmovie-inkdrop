@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Envoi en cours</title>
+<style>
+  :root { --bg:#fafaf7; --fg:#1b1b1b; --muted:#6b6b66; --line:#d9d8d2; --accent:#1b1b1b; --err:#a3281f; --ok:#256b3a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161616; --fg:#eeeeea; --muted:#9a9a94; --line:#333; --accent:#eeeeea; --err:#ff8a80; --ok:#7fd49a; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:17px/1.45 system-ui, sans-serif; }
+  main { max-width:30rem; margin:0 auto; padding:2rem 16px 3rem; }
+  h1 { font-size:1.4rem; margin:0 0 .5rem; } p { margin:.4rem 0; } .muted { color:var(--muted); }
+  #state { font-size:1.15rem; margin:1.2rem 0 .3rem; } .ok { color:var(--ok); } .err { color:var(--err); }
+  a.button { display:block; text-align:center; margin-top:1.8rem; padding:.7rem .8rem; border-radius:8px; background:var(--accent); color:var(--bg); font-weight:600; text-decoration:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Votre image</h1>
+  <p id="state" role="status" aria-live="polite">Vérification…</p>
+  <p id="detail" class="muted"></p>
+  <a class="button" href="/">Envoyer une autre image</a>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const id = location.pathname.split("/").filter(Boolean).pop() || "";
+function show(text, cls, detail) { $("state").textContent = text; $("state").className = cls || ""; $("detail").textContent = detail || ""; }
+function hhmm(seconds) {
+  return new Date(Date.now() + seconds * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+async function poll() {
+  let r;
+  try { r = await fetch("/api/status/" + encodeURIComponent(id)); } catch (e) { setTimeout(poll, 5000); return; }
+  if (r.status === 404) return show("Envoi introuvable.", "err", "Le lien est incorrect, ou l'envoi est trop ancien.");
+  const s = await r.json().catch(() => ({}));
+  if (s.status === "shown") return show("Votre image a été affichée.", "ok", "Merci !");
+  if (s.status === "failed" || s.status === "expired") return show("L'image n'a pas pu être affichée.", "err", "Vous pouvez en envoyer une autre.");
+  show("Image reçue.", "ok", `Position ${s.position} dans la file — affichage vers ${hhmm(s.eta_seconds)}.`);
+  setTimeout(poll, 5000);
+}
+poll();
+</script>
+</body>
+</html>

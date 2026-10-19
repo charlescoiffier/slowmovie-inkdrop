@@ -49,6 +49,7 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
     COOKIE = "sm_admin"
     CSRF_HEADER = "x-requested-with"
     page = (Path(__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
+    envoi_page = (Path(__file__).parent / "static" / "envoi.html").read_text(encoding="utf-8")
 
     @app.middleware("http")
     async def reject_huge_bodies(request: Request, call_next):
@@ -107,6 +108,10 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         return page
+
+    @app.get("/envoi/{image_id}", response_class=HTMLResponse)
+    def envoi_page_route(image_id: str) -> str:
+        return envoi_page
 
     @app.get("/api/config")
     def public_config() -> dict:
