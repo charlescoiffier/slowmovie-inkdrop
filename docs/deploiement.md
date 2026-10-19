@@ -79,14 +79,14 @@ Le script suit les étapes 3 à 14 de la recette et peut être relancé sans ris
 | Étape de la recette | Ce que fait le script |
 |---|---|
 | 3. SPI | l'active ; si un redémarrage est nécessaire, il le dit : `sudo reboot`, puis relancer le script |
-| 4. Swap | `CONF_SWAPSIZE=512` (critique sur le Zero 2 W) |
+| 4. Swap | `CONF_SWAPSIZE=512` (critique sur le Zero 2 W) ; sur Raspberry Pi OS récent (Debian 13 « Trixie »), `rpi-swap` fournit déjà une swap zram et entre en conflit avec `dphys-swapfile` : il est alors conservé |
 | 5. Paquets | git, pip, venv, ffmpeg, libs de compilation, Samba, avahi, rsync, unzip, police DejaVu (accents du texte sous l'image) |
 | 6. Environnement | `python3 -m venv --system-site-packages /home/admin/.SlowMovie` |
 | 7-8. Code et dépendances | `pip install` de ce dépôt (`[video,tui]` : ffmpeg-python, Pillow, Textual, httpx) |
-| 9. waveshare-epd | téléchargé depuis GitHub (waveshareteam/e-Paper) puis installé à la main |
+| 9. waveshare-epd | téléchargé depuis GitHub (waveshareteam/e-Paper, plus de 120 Mo) dans le dossier personnel (`/tmp` est en mémoire vive et trop petit sur un Zero 2 W), puis installé à la main |
 | 10. omni-epd | `--no-deps`, puis `importlib_resources`, `inky --no-deps`, `gpiodevice smbus2 spidev numpy` |
 | 11. Vérification | `import omni_epd` et `import slowmovie_inkdrop` |
-| 13. Samba | partage « SlowMovie » (dossier `Videos`, utilisateur `admin` seulement) ; demande un mot de passe Samba |
+| 13. Samba | partage « SlowMovie » (dossier `Videos`, utilisateur `admin` seulement) ; demande un mot de passe Samba. Lancé sans terminal (par ex. via `ssh admin@... ./deploy/install-pi.sh`), le script ne le demande pas : faire ensuite `sudo smbpasswd -a admin` |
 | 14. Service | `slowmovie.service` (attente de 10 s au démarrage, redémarrage automatique) |
 
 Il crée aussi `/home/admin/SlowMovie/slowmovie.conf` (droits `600`, jamais écrasé) avec les options de l'ancien service :
