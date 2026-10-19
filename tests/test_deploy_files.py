@@ -72,3 +72,15 @@ def test_example_settings_reproduce_the_old_service_options():
     s = Settings.load(ROOT / "deploy/slowmovie.conf.example")
     assert (s.delay, s.increment, s.fullscreen) == (40, 4, True)
     assert s.file == "" and s.start == 0          # le film et la frame 336 dépendaient de l'ancienne installation
+
+
+def test_install_script_keeps_rpi_swap_on_trixie_instead_of_replacing_it():
+    script = (ROOT / "deploy/install-pi.sh").read_text()
+    assert "dpkg -s rpi-swap" in script                    # rpi-swap (zram) entre en conflit avec dphys-swapfile
+    check = script.index("dpkg -s rpi-swap")
+    assert check < script.index("apt-get install -y dphys-swapfile")
+
+
+def test_install_script_does_not_block_when_run_without_a_terminal():
+    script = (ROOT / "deploy/install-pi.sh").read_text()
+    assert "[ -t 0 ]" in script and "sudo smbpasswd -a admin" in script

@@ -17,18 +17,23 @@ if [ ! -e /dev/spidev0.0 ]; then
   exit 0
 fi
 
-echo "== 4. Swap à 512 Mo (critique sur le Zero 2 W)"
+echo "== 4. Swap (critique sur le Zero 2 W)"
 sudo apt-get update
-sudo apt-get install -y dphys-swapfile
-if ! grep -q '^CONF_SWAPSIZE=512$' /etc/dphys-swapfile; then
-  sudo dphys-swapfile swapoff
-  if grep -q '^#\?CONF_SWAPSIZE=' /etc/dphys-swapfile; then
-    sudo sed -i 's/^#\?CONF_SWAPSIZE=.*/CONF_SWAPSIZE=512/' /etc/dphys-swapfile
-  else
-    echo 'CONF_SWAPSIZE=512' | sudo tee -a /etc/dphys-swapfile >/dev/null
+if dpkg -s rpi-swap >/dev/null 2>&1; then
+  # Raspberry Pi OS récent : rpi-swap gère une swap zram et entre en conflit avec dphys-swapfile
+  echo "rpi-swap (zram) gère déjà la swap : conservé"
+else
+  sudo apt-get install -y dphys-swapfile
+  if ! grep -q '^CONF_SWAPSIZE=512$' /etc/dphys-swapfile; then
+    sudo dphys-swapfile swapoff
+    if grep -q '^#\?CONF_SWAPSIZE=' /etc/dphys-swapfile; then
+      sudo sed -i 's/^#\?CONF_SWAPSIZE=.*/CONF_SWAPSIZE=512/' /etc/dphys-swapfile
+    else
+      echo 'CONF_SWAPSIZE=512' | sudo tee -a /etc/dphys-swapfile >/dev/null
+    fi
+    sudo dphys-swapfile setup
+    sudo dphys-swapfile swapon
   fi
-  sudo dphys-swapfile setup
-  sudo dphys-swapfile swapon
 fi
 free -h | grep -i swap
 
@@ -76,8 +81,12 @@ if ! grep -q '^\[SlowMovie\]' /etc/samba/smb.conf; then
   sudo tee -a /etc/samba/smb.conf < "$REPO/deploy/smb.conf.snippet" >/dev/null
 fi
 if ! sudo pdbedit -L | grep '^admin:' >/dev/null; then   # sans -q : pas de SIGPIPE avec pipefail
-  echo "Choisissez le mot de passe Samba de l'utilisateur admin :"
-  sudo smbpasswd -a admin
+  if [ -t 0 ]; then
+    echo "Choisissez le mot de passe Samba de l'utilisateur admin :"
+    sudo smbpasswd -a admin
+  else
+    echo "Samba : mot de passe non défini (session sans terminal). À faire ensuite : sudo smbpasswd -a admin"
+  fi
 fi
 sudo systemctl restart smbd avahi-daemon
 
