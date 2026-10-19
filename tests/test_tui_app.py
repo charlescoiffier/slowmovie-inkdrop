@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from textual.widgets import Tabs
 
 from slowmovie_inkdrop.config import Paths, Settings
 from slowmovie_inkdrop.tui import app as tui_app
@@ -17,7 +18,8 @@ def paths(tmp_path):
     p = Paths(tmp_path)
     p.state.write_text(json.dumps(STATE))
     p.library.write_text(json.dumps(
-        {"metropolis.mp4": {"size": 1, "status": "ready", "frames": 100, "changed_at": 0}}))
+        {"metropolis.mp4": {"size": 1, "status": "ready", "frames": 100, "fps": 24.0, "duration": 100.0,
+                         "changed_at": 0}}))
     Settings().save(p.conf)
     return p
 
@@ -144,3 +146,96 @@ async def test_queue_tab_shows_the_caption_of_each_image(paths, sent):
         await pilot.pause()
         row = pilot.app.query_one("#queue-table").get_row_at(0)
         assert "Joyeux anniversaire" in row
+
+
+async def test_down_from_the_tab_bar_enters_the_content_of_the_tab(paths, sent):
+    async with SlowMovieApp(paths).run_test() as pilot:
+        await pilot.press("2")
+        pilot.app.focus_tabs()
+        await pilot.pause()
+        assert isinstance(pilot.app.focused, Tabs)
+        await pilot.press("down")
+        await pilot.pause()
+        assert pilot.app.focused.id == "films-table"
+
+
+async def test_down_from_the_tab_bar_works_on_every_table_tab(paths, sent):
+    async with SlowMovieApp(paths).run_test() as pilot:
+        for key, table in (("3", "queue-table"), ("4", "settings-table"), ("5", "log-view")):
+            await pilot.press(key)
+            pilot.app.focus_tabs()
+            await pilot.pause()
+            await pilot.press("down")
+            await pilot.pause()
+            assert pilot.app.focused.id == table
+
+
+async def test_up_on_the_first_row_returns_to_the_tab_bar_and_up_elsewhere_moves_the_cursor(paths, sent):
+    async with SlowMovieApp(paths).run_test() as pilot:
+        await pilot.press("4")
+        await pilot.pause()
+        await pilot.press("down", "down")
+        await pilot.press("up")
+        assert pilot.app.query_one("#settings-table").cursor_row == 1
+        await pilot.press("up")
+        await pilot.press("up")
+        await pilot.pause()
+        assert isinstance(pilot.app.focused, Tabs)
+
+
+async def test_escape_returns_to_the_tab_bar(paths, sent):
+    async with SlowMovieApp(paths).run_test() as pilot:
+        await pilot.press("2")
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(pilot.app.focused, Tabs)
+
+
+async def test_films_table_shows_position_and_start_columns(paths, sent):
+    from slowmovie_inkdrop.starts import StartPoints
+    StartPoints(paths.starts).set("metropolis.mp4", 90)
+    paths.progress.mkdir(exist_ok=True)
+    (paths.progress / "metropolis.mp4.progress").write_text("240")
+    async with SlowMovieApp(paths).run_test() as pilot:
+        await pilot.press("2")
+        await pilot.pause()
+        row = pilot.app.query_one("#films-table").get_row_at(0)
+        assert "00:00:10" in row and "00:01:30" in row
+
+
+async def _prompt(pilot, key, text):
+    await pilot.press("2")
+    await pilot.pause()
+    await pilot.press(key)
+    await pilot.pause()
+    pilot.app.screen.query_one("Input").value = text
+    await pilot.press("enter")
+    await pilot.pause()
+
+
+async def test_t_sets_the_start_point(paths, sent):
+    async with SlowMovieApp(paths).run_test() as pilot:
+        await _prompt(pilot, "t", "00:01:30")
+        assert sent[-1] == {"cmd": "set_start", "video": "metropolis.mp4", "seconds": 90.0}
+
+
+async def test_g_seeks_to_a_timecode(paths, sent):
+    async with SlowMovieApp(paths).run_test() as pilot:
+        await _prompt(pilot, "g", "1:05")
+        assert sent[-1] == {"cmd": "seek", "video": "metropolis.mp4", "seconds": 65.0}
+
+
+async def test_an_invalid_timecode_sends_nothing(paths, sent):
+    async with SlowMovieApp(paths).run_test() as pilot:
+        before = len(sent)
+        await _prompt(pilot, "t", "n'importe quoi")
+        assert len(sent) == before and pilot.app.is_running
+
+
+async def test_z_goes_back_to_the_start_point(paths, sent):
+    async with SlowMovieApp(paths).run_test() as pilot:
+        await pilot.press("2")
+        await pilot.pause()
+        await pilot.press("z")
+        assert sent[-1] == {"cmd": "reset", "video": "metropolis.mp4"}

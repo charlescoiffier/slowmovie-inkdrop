@@ -1,6 +1,7 @@
 """Application Textual : cinq onglets, tout au clavier."""
 from __future__ import annotations
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.screen import ModalScreen
@@ -14,18 +15,21 @@ from textual.widgets import (
     Static,
     TabbedContent,
     TabPane,
+    Tabs,
 )
 
 from ..cli import format_status
 from ..config import ConfigError, Paths, Settings
 from ..control import ServiceNotRunning, send_command
+from ..starts import format_timecode, parse_timecode
 from . import model
 from .theme import GALAXY
 
 STATUS_LABELS = {"ready": "prêt", "pending": "copie en cours…", "error": "illisible"}
 HELP = ("1-5 onglets · Espace pause/reprise · s passer · Entrée valider · q quitter\n"
-        "Films : Entrée lancer, z remettre à zéro, d supprimer, a ajouter\n"
-        "File : x retirer, c vider · Réglages : Entrée modifier")
+        "Films : Entrée lancer, t point de départ, g aller à, z revenir au départ, d supprimer, a ajouter\n"
+        "File : x retirer, c vider · Réglages : Entrée modifier\n"
+        "Flèche bas depuis les onglets pour entrer dans la liste, Échap pour revenir aux onglets")
 
 
 class Prompt(ModalScreen[str | None]):
@@ -45,6 +49,16 @@ class Prompt(ModalScreen[str | None]):
         self.dismiss(event.value)
 
 
+class NavTable(DataTable):
+    """Table dont la flèche haut, sur la première ligne, rend le focus à la barre d'onglets."""
+
+    def action_cursor_up(self) -> None:
+        if self.cursor_row == 0:
+            self.app.focus_tabs()
+        else:
+            super().action_cursor_up()
+
+
 class SlowMovieApp(App):
     TITLE = "SlowMovie-Inkdrop"
     CSS = "Prompt { align: center middle; } Prompt > * { width: 70%; } #player-info { padding: 1 2; }"
@@ -53,7 +67,10 @@ class SlowMovieApp(App):
         Binding("3", "tab('queue')", "File"), Binding("4", "tab('settings')", "Réglages"),
         Binding("5", "tab('log')", "Journal"),
         Binding("space", "toggle_pause", "Pause"), Binding("s", "send('skip')", "Passer"),
-        Binding("z", "reset_film", "Remettre à zéro", show=False),
+        Binding("z", "reset_film", "Revenir au départ", show=False),
+        Binding("t", "set_start", "Point de départ", show=False),
+        Binding("g", "seek", "Aller à", show=False),
+        Binding("escape", "focus_tabs", "Onglets", show=False),
         Binding("d", "delete_film", "Supprimer", show=False),
         Binding("a", "how_to_add", "Ajouter", show=False),
         Binding("x", "queue_remove", "Retirer", show=False),
@@ -73,11 +90,11 @@ class SlowMovieApp(App):
             with TabPane("Lecteur", id="player"):
                 yield Static("", id="player-info")
             with TabPane("Films", id="films"):
-                yield DataTable(id="films-table", cursor_type="row")
+                yield NavTable(id="films-table", cursor_type="row")
             with TabPane("File", id="queue"):
-                yield DataTable(id="queue-table", cursor_type="row")
+                yield NavTable(id="queue-table", cursor_type="row")
             with TabPane("Réglages", id="settings"):
-                yield DataTable(id="settings-table", cursor_type="row")
+                yield NavTable(id="settings-table", cursor_type="row")
             with TabPane("Journal", id="log"):
                 yield RichLog(id="log-view", wrap=True)
         yield Footer()
@@ -85,7 +102,7 @@ class SlowMovieApp(App):
     def on_mount(self) -> None:
         self.register_theme(GALAXY)
         self.theme = "galaxy"
-        self.query_one("#films-table", DataTable).add_columns("Film", "État", "Progression")
+        self.query_one("#films-table", DataTable).add_columns("Film", "État", "Avancement", "Position", "Départ")
         self.query_one("#queue-table", DataTable).add_columns("Image", "Durée", "Texte")
         self.query_one("#settings-table", DataTable).add_columns("Réglage", "Valeur")
         self.set_interval(2.0, self.refresh_data)
@@ -96,9 +113,13 @@ class SlowMovieApp(App):
         self.state = model.read_state(self.paths)
         self.player_text = format_status(self.state)
         self.query_one("#player-info", Static).update(self.player_text)
+        def tc(value):
+            return format_timecode(value) if value is not None else "—"
+
         self._fill("#films-table", [
             (r["name"], (r["name"], STATUS_LABELS.get(r["status"], r["status"]),
-                         f"{r['percent']} %" if r["percent"] is not None else r["error"]))
+                         f"{r['percent']} %" if r["percent"] is not None else r["error"],
+                         tc(r["position_seconds"]), tc(r["start_seconds"])))
             for r in model.film_rows(self.paths)])
         self._fill("#queue-table", [
             (i["id"], (i["id"][:8], f"{i['duration'] // 60} min", i.get("caption", "")))
@@ -133,6 +154,57 @@ class SlowMovieApp(App):
         if not reply.get("ok"):
             self.notify(reply.get("error", "échec"), severity="error")
         return reply
+
+    def focus_tabs(self) -> None:
+        self.query_one(TabbedContent).query_one(Tabs).focus()
+
+    def action_focus_tabs(self) -> None:
+        self.focus_tabs()
+
+    def focus_content(self) -> None:
+        target = {"films": "#films-table", "queue": "#queue-table", "settings": "#settings-table",
+                  "log": "#log-view"}.get(self.query_one(TabbedContent).active)
+        if target:
+            self.query_one(target).focus()
+
+    def on_key(self, event: events.Key) -> None:
+        if event.key == "down" and isinstance(self.focused, Tabs):
+            self.focus_content()
+            event.stop()
+            event.prevent_default()
+
+    def _selected_film(self) -> dict | None:
+        key = self._selected_key("#films-table")
+        return next((r for r in model.film_rows(self.paths) if r["name"] == key), None)
+
+    def _ask_timecode(self, title: str, command: str, current: float) -> None:
+        film = self._selected_film()
+        if film is None:
+            return
+        name = film["name"]
+
+        def entered(value: str | None) -> None:
+            if value is None:
+                return
+            try:
+                seconds = parse_timecode(value)
+            except ValueError as exc:
+                self.notify(str(exc), severity="error")
+                return
+            self._send(cmd=command, video=name, seconds=seconds)
+            self.refresh_data()
+
+        self.push_screen(Prompt(f"{title} — {name} (hh:mm:ss)", format_timecode(current)), entered)
+
+    def action_set_start(self) -> None:
+        film = self._selected_film()
+        if film:
+            self._ask_timecode("Point de départ", "set_start", film["start_seconds"])
+
+    def action_seek(self) -> None:
+        film = self._selected_film()
+        if film:
+            self._ask_timecode("Aller à", "seek", film["position_seconds"] or 0.0)
 
     def action_tab(self, tab: str) -> None:
         self.query_one(TabbedContent).active = tab

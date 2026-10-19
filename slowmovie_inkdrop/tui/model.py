@@ -5,6 +5,7 @@ import json
 from collections import deque
 
 from ..config import Paths
+from ..starts import StartPoints, frame_to_seconds
 from ..videos import read_progress
 
 # (champ de Settings, libellé affiché, type d'édition)
@@ -17,6 +18,7 @@ SETTING_FIELDS: list[tuple[str, str, str]] = [
     ("fullscreen", "Remplir l'écran (recadrer)", "bool"),
     ("subtitles", "Sous-titres", "bool"),
     ("timecode", "Afficher le timecode", "bool"),
+    ("subtitle_track", "Piste de sous-titres intégrée (0 = première)", "int"),
     ("contrast", "Contraste (0.1 à 3.0)", "float"),
     ("min_image_seconds", "Durée minimale d'une image envoyée (s)", "int"),
     ("max_image_seconds", "Durée maximale d'une image envoyée (s)", "int"),
@@ -41,14 +43,18 @@ def film_rows(paths: Paths) -> list[dict]:
         entries = json.loads(paths.library.read_text())
     except (OSError, ValueError):
         return []
+    starts = StartPoints(paths.starts).all()
     rows = []
     for name, entry in sorted(entries.items()):
-        percent = None
+        percent = position = None
+        fps = entry.get("fps")
         if entry.get("status") == "ready" and entry.get("frames"):
             done = read_progress(paths.progress, paths.base / name)
             percent = round(100 * done / entry["frames"], 1)
+            position = round(frame_to_seconds(done, fps), 1) if fps else None
         rows.append({"name": name, "status": entry.get("status", "?"), "percent": percent,
-                     "error": entry.get("error", "")})
+                     "error": entry.get("error", ""), "position_seconds": position,
+                     "start_seconds": starts.get(name, 0.0), "duration_seconds": entry.get("duration")})
     return rows
 
 
