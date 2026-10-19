@@ -7,9 +7,13 @@ Wants=network-online.target
 User=admin
 Environment=SLOWMOVIE_HOME=/home/admin/SlowMovie
 WorkingDirectory=/home/admin/SlowMovie
-ExecStart=/home/admin/SlowMovie/.venv/bin/slowmovie run
+# Petite attente au démarrage (reprise de l'ancien service, qui fonctionnait ainsi sur le Zero 2 W)
+ExecStartPre=/bin/sleep 10
+ExecStart=/home/admin/.SlowMovie/bin/slowmovie run
 Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

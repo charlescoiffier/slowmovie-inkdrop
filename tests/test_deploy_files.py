@@ -5,7 +5,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def test_service_runs_the_installed_command():
     unit = (ROOT / "deploy/slowmovie.service").read_text()
-    assert "ExecStart=/home/admin/SlowMovie/.venv/bin/slowmovie run" in unit
+    assert "ExecStart=/home/admin/.SlowMovie/bin/slowmovie run" in unit
+    assert "ExecStartPre=/bin/sleep 10" in unit
     assert "Restart=always" in unit and "User=admin" in unit
     assert "SLOWMOVIE_HOME=/home/admin/SlowMovie" in unit
 
@@ -38,3 +39,36 @@ def test_install_script_is_executable_and_strict():
     script = ROOT / "deploy/install-pi.sh"
     assert script.stat().st_mode & 0o111
     assert "set -euo pipefail" in script.read_text()
+
+
+def test_install_script_is_valid_bash():
+    import subprocess
+    result = subprocess.run(["bash", "-n", str(ROOT / "deploy/install-pi.sh")], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_install_script_follows_the_validated_zero_2_w_recipe():
+    script = (ROOT / "deploy/install-pi.sh").read_text()
+    for step in (
+        "CONF_SWAPSIZE=512",                                   # swap : critique sur le Zero 2 W
+        "python3 -m venv --system-site-packages",              # même venv que la recette
+        "/home/admin/.SlowMovie",
+        "waveshareteam/e-Paper",                               # waveshare-epd installé à la main
+        "install --no-deps \"git+https://github.com/robweber/omni-epd.git",   # omni-epd sans ses dépendances
+        "robweber/omni-epd",
+        "gpiodevice smbus2 spidev numpy",
+        "import omni_epd",                                     # vérification
+        "do_spi 0",                                            # SPI
+        "/usr/local/bin/slowmovie",                            # `ssh admin@... slowmovie` sans PATH du venv
+        "fonts-dejavu-core",
+        "slowmovie.conf.example",
+    ):
+        assert step in script, step
+    assert ".[epd]" not in script and "[video,tui,epd]" not in script
+
+
+def test_example_settings_reproduce_the_old_service_options():
+    from slowmovie_inkdrop.config import Settings
+    s = Settings.load(ROOT / "deploy/slowmovie.conf.example")
+    assert (s.delay, s.increment, s.fullscreen) == (40, 4, True)
+    assert s.file == "" and s.start == 0          # le film et la frame 336 dépendaient de l'ancienne installation

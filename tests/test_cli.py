@@ -85,4 +85,12 @@ def test_remote_mode_delegates_to_ssh(monkeypatch):
     calls = []
     monkeypatch.setattr(cli.subprocess, "call", lambda cmd: calls.append(cmd) or 0)
     assert cli.main(["status"]) == 0
-    assert calls[0][:3] == ["ssh", "-t", "admin@slowmovie.local"]
+    assert calls[0][:3] == ["ssh", "-t", "admin@slomovpi.local"]
+
+
+def test_target_defaults_to_the_pi_hostname_and_can_be_overridden(monkeypatch):
+    for name in ("SLOWMOVIE_HOST", "SLOWMOVIE_USER", "SLOWMOVIE_REMOTE_PATH"):
+        monkeypatch.delenv(name, raising=False)
+    assert cli._client_target() == ("slomovpi.local", "admin", "/home/admin/SlowMovie")
+    monkeypatch.setenv("SLOWMOVIE_HOST", "192.168.1.50")
+    assert cli._client_target()[0] == "192.168.1.50"

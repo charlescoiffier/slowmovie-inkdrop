@@ -1,0 +1,7 @@
+# Copié en /home/admin/SlowMovie/slowmovie.conf à la première installation (jamais écrasé ensuite).
+# Reprend les options de l'ancien service : -d 40 -i 4 -F
+delay = 40
+increment = 4
+fullscreen = true
+# Le film et l'image de départ (-f ... -s 336) dépendaient de l'ancienne installation :
+# ajouter un film avec `slowmovie add`, puis le lancer depuis la TUI (onglet Films).

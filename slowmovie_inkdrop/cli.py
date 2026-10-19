@@ -22,7 +22,7 @@ def is_remote() -> bool:
 
 
 def _client_target() -> tuple[str, str, str]:
-    return (os.environ.get("SLOWMOVIE_HOST", "slowmovie.local"),
+    return (os.environ.get("SLOWMOVIE_HOST", "slomovpi.local"),
             os.environ.get("SLOWMOVIE_USER", "admin"),
             os.environ.get("SLOWMOVIE_REMOTE_PATH", "/home/admin/SlowMovie"))
 
