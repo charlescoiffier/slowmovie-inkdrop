@@ -26,6 +26,8 @@ class Store:
                 self._db.execute("ALTER TABLE items ADD COLUMN fetched_at REAL")
             if "caption" not in columns:                  # base créée avant l'ajout du texte
                 self._db.execute("ALTER TABLE items ADD COLUMN caption TEXT NOT NULL DEFAULT ''")
+            if "caption_size" not in columns:             # base créée avant le corps de légende
+                self._db.execute("ALTER TABLE items ADD COLUMN caption_size INTEGER NOT NULL DEFAULT 0")
             self._db.execute("CREATE TABLE IF NOT EXISTS device_state (id INTEGER PRIMARY KEY CHECK (id = 1), "
                              "body TEXT NOT NULL, received_at REAL NOT NULL)")
             self._db.execute("CREATE TABLE IF NOT EXISTS commands (id TEXT PRIMARY KEY, kind TEXT NOT NULL, "
@@ -36,11 +38,12 @@ class Store:
     def image_path(self, image_id: str) -> Path:
         return self.images / f"{image_id}.png"
 
-    def add(self, image_id: str, duration: int, png: bytes, now: float, caption: str = "") -> None:
+    def add(self, image_id: str, duration: int, png: bytes, now: float, caption: str = "",
+            caption_size: int = 0) -> None:
         self.image_path(image_id).write_bytes(png)
         with self._lock:
-            self._db.execute("INSERT INTO items (id, status, duration, created_at, caption) "
-                             "VALUES (?, 'queued', ?, ?, ?)", (image_id, duration, now, caption))
+            self._db.execute("INSERT INTO items (id, status, duration, created_at, caption, caption_size) "
+                             "VALUES (?, 'queued', ?, ?, ?, ?)", (image_id, duration, now, caption, caption_size))
             self._db.commit()
 
     def active_count(self) -> int:

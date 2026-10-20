@@ -47,3 +47,25 @@ def test_message_is_truncated(tmp_path):
     store.add_command("c1", "pause", {"kind": "pause"}, now=0.0)
     store.ack_command("c1", "failed", "x" * 1000, now=1.0)
     assert len(store.get_command("c1")["message"]) <= 300
+
+
+def test_caption_size_defaults_to_zero_and_is_stored(tmp_path):
+    store = Store(tmp_path)
+    store.add("a" * 32, 60, b"png", 1.0)
+    store.add("b" * 32, 60, b"png", 2.0, caption="π", caption_size=14)
+    assert store.get("a" * 32)["caption_size"] == 0
+    assert store.get("b" * 32)["caption_size"] == 14
+
+
+def test_a_database_created_before_caption_size_is_migrated(tmp_path):
+    import sqlite3
+    db = sqlite3.connect(tmp_path / "relay.db")
+    db.execute("CREATE TABLE items (id TEXT PRIMARY KEY, status TEXT NOT NULL, duration INTEGER NOT NULL, "
+               "created_at REAL NOT NULL, fetched_at REAL, caption TEXT NOT NULL DEFAULT '')")
+    db.execute("INSERT INTO items (id, status, duration, created_at, caption) VALUES ('old', 'queued', 60, 1, 'x')")
+    db.commit()
+    db.close()
+    store = Store(tmp_path)
+    assert store.get("old")["caption_size"] == 0
+    store.add("c" * 32, 60, b"png", 3.0, caption_size=14)
+    assert store.get("c" * 32)["caption_size"] == 14

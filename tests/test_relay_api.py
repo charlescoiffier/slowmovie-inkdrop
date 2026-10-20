@@ -132,7 +132,7 @@ def test_device_flow_pending_fetch_ack(env):
     client, *_ = env
     image_id = send(client, duration="120").json()["id"]
     pending = client.get("/api/device/pending", headers=DEVICE).json()
-    assert pending == [{"id": image_id, "duration": 120, "caption": ""}]
+    assert pending == [{"id": image_id, "duration": 120, "caption": "", "caption_size": 0}]
     data = client.get(f"/api/device/image/{image_id}", headers=DEVICE)
     assert data.status_code == 200 and data.content[:4] == b"\x89PNG"
     assert client.get("/api/device/pending", headers=DEVICE).json() == []   # déjà récupérée
@@ -235,3 +235,10 @@ def test_upload_page_has_the_caption_field(env):
     client, *_ = env
     html = client.get("/").text
     assert 'name="caption"' in html and "maxlength" in html
+
+
+def test_plain_uploads_carry_no_caption_size(env):
+    client, *_ = env
+    assert send(client).status_code == 202
+    (item,) = client.get("/api/device/pending", headers=DEVICE).json()
+    assert item["caption_size"] == 0

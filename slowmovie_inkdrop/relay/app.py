@@ -32,6 +32,7 @@ def pipiquant_legend(decimals: int, angle: int) -> str:
     return f"π-piquant • 1 = {angle}° • {decimals} {'décimale' if decimals == 1 else 'décimales'}"
 
 
+PIPIQUANT_CAPTION_SIZE = 14      # corps (px) de la légende d'un π-piquant
 PIPIQUANT_SIZE = 800      # grand côté en pixels : la largeur de l'écran
 
 
@@ -158,13 +159,13 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
         if store.active_count() >= config.queue_max:
             raise HTTPException(409, "La file d'attente est pleine. Réessayez dans quelques minutes.")
 
-    def enqueue(seconds: int, data: bytes, caption: str) -> dict:
+    def enqueue(seconds: int, data: bytes, caption: str, caption_size: int = 0) -> dict:
         try:
             png = sanitize_upload(data, max_bytes=config.max_upload_bytes)
         except InvalidImage as exc:
             raise HTTPException(_STATUS_FOR_CODE.get(exc.code, 422), exc.message) from None
         image_id = uuid.uuid4().hex
-        store.add(image_id, seconds, png, clock(), caption)
+        store.add(image_id, seconds, png, clock(), caption, caption_size)
         position, eta = store.position_and_eta(image_id)
         return {"id": image_id, "position": position, "eta_seconds": eta}
 
@@ -216,7 +217,8 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
         angle = rng.randint(*PIPIQUANT_ANGLES)
         data = fetch_pipiquant(decimals, angle)
         try:
-            body = enqueue(seconds, data, pipiquant_legend(decimals, angle) if title == "oui" else "")
+            legend = pipiquant_legend(decimals, angle) if title == "oui" else ""
+            body = enqueue(seconds, data, legend, PIPIQUANT_CAPTION_SIZE if legend else 0)
         except HTTPException as exc:
             if exc.status_code in (413, 415, 422):
                 raise HTTPException(502, "Le service π-piquant a renvoyé une image illisible.") from None
@@ -235,7 +237,8 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
     def pending() -> list[dict]:
         store.purge(clock(), config.expiry_seconds)
         offered = store.offerable(clock(), config.lease_seconds)
-        return [{"id": i["id"], "duration": i["duration"], "caption": i["caption"]} for i in offered]
+        return [{"id": i["id"], "duration": i["duration"], "caption": i["caption"],
+                 "caption_size": i["caption_size"]} for i in offered]
 
     @app.get("/api/device/image/{image_id}", dependencies=[Depends(require_device)])
     def device_image(image_id: str) -> Response:

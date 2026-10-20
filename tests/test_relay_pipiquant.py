@@ -81,6 +81,7 @@ def test_the_legend_travels_as_the_caption(tmp_path):
     (item,) = client.get("/api/device/pending", headers=DEVICE).json()
     assert item["id"] == image_id
     assert item["caption"] == "π-piquant • 1 = 359° • 200 décimales"
+    assert item["caption_size"] == 14
     client2, _ = make(tmp_path / "b", rng=Extreme("lo"))
     draw(client2)
     assert client2.get("/api/device/pending", headers=DEVICE).json()[0]["caption"] == "π-piquant • 1 = 1° • 1 décimale"
@@ -90,7 +91,7 @@ def test_the_title_can_be_left_out(env):
     client, api = env
     assert draw(client, title="non").status_code == 202
     (item,) = client.get("/api/device/pending", headers=DEVICE).json()
-    assert item["caption"] == ""
+    assert item["caption"] == "" and item["caption_size"] == 0
     assert query(api.calls[0])["titre"] == "non"          # jamais de légende dessinée par le service
 
 
