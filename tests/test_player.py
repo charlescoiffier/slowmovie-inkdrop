@@ -277,7 +277,26 @@ def test_caption_is_drawn_on_the_displayed_image_only_when_present(make_player):
                         caption="Joyeux anniversaire")
     with_text.player.tick()
     diff = ImageChops.difference(plain.display.shown[-1], with_text.display.shown[-1]).getbbox()
-    assert diff is not None and diff[1] > 480 * 0.8        # texte en bas, rien ailleurs
+    assert diff is not None and diff[1] > 480 * 0.7        # texte en bas, rien ailleurs
+
+
+def test_caption_bottom_margin_follows_the_setting(make_player):
+    from PIL import ImageChops
+
+    def text_box(name, caption, **settings):
+        ctx = make_player(base=name, **settings)
+        ctx.queue.add(A, png_bytes(size=(800, 480), color="gray"), 60, ctx.clock(), caption=caption)
+        ctx.player.tick()
+        return ctx.display.shown[-1]
+
+    def box(tag, **settings):
+        base = text_box(tag / "sans", "", **settings)
+        return ImageChops.difference(base, text_box(tag / "avec", "Bonjour", **settings)).getbbox()
+
+    root = make_player().paths.base
+    assert box(root / "m120", caption_margin=120)[3] <= 480 - 120
+    assert box(root / "m40")[3] <= 480 - 40               # défaut : 40 px
+    assert box(root / "m0", caption_margin=0)[3] > 480 - 40
 
 
 def test_overlong_caption_from_the_queue_is_cut_to_the_setting(make_player):

@@ -94,6 +94,15 @@ def test_caption_max_chars_out_of_range_is_refused(tmp_path, value):
         Settings(caption_max_chars=value).save(tmp_path / "x.conf")
 
 
+def test_caption_margin_default_and_bounds(tmp_path):
+    assert Settings().caption_margin == 40
+    for ok in (0, 200):
+        Settings(caption_margin=ok).save(tmp_path / "x.conf")
+    for bad in (-1, 201):
+        with pytest.raises(ConfigError):
+            Settings(caption_margin=bad).save(tmp_path / "x.conf")
+
+
 def test_paths_for_start_points_and_command_log(tmp_path):
     paths = Paths(tmp_path)
     assert paths.starts == tmp_path / "films.json" and paths.commands == tmp_path / "commands.json"

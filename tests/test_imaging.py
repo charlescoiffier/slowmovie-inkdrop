@@ -125,8 +125,19 @@ def test_draw_caption_is_centered_at_the_bottom_and_leaves_the_rest_alone():
     base = Image.new("RGB", (800, 480), (120, 120, 120))
     left, top, right, bottom = _bbox_of_change(base, draw_caption(base, "Bonjour tout le monde"))
     assert abs((left + right) / 2 - 400) <= 3
-    assert top > 480 * 0.8 and bottom <= 480
+    assert top > 480 * 0.7 and bottom <= 480
     assert base.getpixel((400, 100)) == (120, 120, 120)
+
+
+def test_draw_caption_text_is_large_and_keeps_a_bottom_margin():
+    base = Image.new("RGB", (800, 480), (120, 120, 120))
+    left, top, right, bottom = _bbox_of_change(base, draw_caption(base, "Bonjour"))
+    assert bottom - top >= 40                      # lisible sur l'écran e-paper
+    assert bottom <= 480 - 40                      # marge par défaut : la marquise en carton masque le bas
+    _, _, _, low = _bbox_of_change(base, draw_caption(base, "Bonjour", bottom_margin=100))
+    assert low <= 480 - 100
+    _, _, _, flush = _bbox_of_change(base, draw_caption(base, "Bonjour", bottom_margin=0))
+    assert flush > 480 - 40
 
 
 def test_draw_caption_does_not_modify_its_input():

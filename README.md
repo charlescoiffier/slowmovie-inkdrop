@@ -8,9 +8,11 @@ Raspberry Pi) avec trois apports :
 1. **Envoi d'images à distance** : depuis un téléphone ou un ordinateur, on envoie une image et une durée. Elle remplace
    le film à l'écran pendant ce temps (le film est en pause), puis le film reprend là où il s'était arrêté. Les envois
    forment une file d'attente, protégée par un mot de passe partagé.
-   Un **texte** de 128 caractères au plus peut accompagner l'image : il s'affiche en blanc cerclé de noir, centré en bas.
+   Un **texte** de 128 caractères au plus peut accompagner l'image : il s'affiche en gros, en blanc cerclé de noir, centré en bas,
+   avec une marge réglable sous le texte (`caption_margin`, 40 px par défaut) pour un écran en partie masqué par un cadre.
    Un onglet **π-piquant** tire au hasard un dessin d'après les décimales de π (1 à 200 décimales, angle de 1° à 359°),
-   produit par le service [pi-piquant](https://github.com/charlescoiffier/pi-piquant), et l'affiche pour la durée choisie.
+   produit par le service [pi-piquant](https://github.com/charlescoiffier/pi-piquant), et l'affiche pour la durée choisie ;
+   la légende (« π-piquant • 1 = 214° • 87 décimales ») est écrite par le Pi, en gros, et non dessinée par le service.
    Un onglet **Réglages** (mot de passe administrateur séparé) permet de piloter le Pi à distance : film, position de
    départ et de fin par film (pour sauter les génériques), sous-titres (y compris intégrés au film) et réglages.
 2. **Interface terminal** (TUI Textual, au clavier, thème « galaxy » comme [cadav](https://github.com/charlescoiffier/cadav)).

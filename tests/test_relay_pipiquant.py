@@ -64,11 +64,23 @@ def test_a_draw_calls_the_api_with_the_key_and_default_settings(env):
     assert call.method == "GET" and call.url.path == "/api/png"
     assert call.headers["authorization"] == f"Bearer {KEY}"
     q = query(call)
-    assert set(q) == {"source", "decimales", "angle", "taille"}
+    assert set(q) == {"source", "decimales", "angle", "taille", "titre"}
+    assert q["titre"] == "non"                      # la légende est écrite par le Pi, plus grosse
     assert q["source"] == "pi" and q["taille"] == "800"
     body = r.json()
     assert len(body["id"]) == 32 and body["position"] == 1
     assert (body["decimals"], body["angle"]) == (int(q["decimales"]), int(q["angle"]))
+
+
+def test_the_legend_travels_as_the_caption(tmp_path):
+    client, api = make(tmp_path, rng=Extreme("hi"))
+    image_id = draw(client).json()["id"]
+    (item,) = client.get("/api/device/pending", headers=DEVICE).json()
+    assert item["id"] == image_id
+    assert item["caption"] == "π-piquant • 1 = 359° • 200 décimales"
+    client2, _ = make(tmp_path / "b", rng=Extreme("lo"))
+    draw(client2)
+    assert client2.get("/api/device/pending", headers=DEVICE).json()[0]["caption"] == "π-piquant • 1 = 1° • 1 décimale"
 
 
 def test_the_image_is_queued_like_an_upload(env):

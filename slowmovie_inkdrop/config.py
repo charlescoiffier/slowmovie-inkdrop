@@ -91,6 +91,7 @@ class Settings:
     max_image_seconds: int = 3600
     queue_max: int = 10
     queue_expiry_seconds: int = 21600
+    caption_margin: int = 40         # px libres sous le texte (cadre de l'écran qui en masque le bas)
     caption_max_chars: int = 128     # texte sous l'image ; le Pi ne fait pas confiance au relais
     active_hours: str = ""    # "08:00-22:00" ; vide = toujours actif
     # Relais
@@ -114,6 +115,7 @@ class Settings:
               "doit être ≥ min_image_seconds")
         check(self.queue_max >= 1, "queue_max", "doit être au moins 1")
         check(self.queue_expiry_seconds >= 60, "queue_expiry_seconds", "doit être au moins 60")
+        check(0 <= self.caption_margin <= 200, "caption_margin", "doit être entre 0 et 200")
         check(1 <= self.caption_max_chars <= 500, "caption_max_chars", "doit être entre 1 et 500")
         check(self.relay_poll_seconds >= 5, "relay_poll_seconds", "doit être au moins 5")
         check(self.loglevel.upper() in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"),

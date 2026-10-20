@@ -6,13 +6,13 @@ import math
 REMOTE_SETTINGS = (
     "delay", "increment", "random_file", "random_frames", "loop", "fullscreen", "subtitles", "timecode",
     "subtitle_track", "contrast", "min_image_seconds", "max_image_seconds", "queue_max",
-    "queue_expiry_seconds", "caption_max_chars", "active_hours", "relay_poll_seconds",
+    "queue_expiry_seconds", "caption_max_chars", "caption_margin", "active_hours", "relay_poll_seconds",
 )
 SETTING_TYPES: dict[str, type] = {
     "delay": int, "increment": int, "random_file": bool, "random_frames": bool, "loop": bool,
     "fullscreen": bool, "subtitles": bool, "timecode": bool, "subtitle_track": int, "contrast": float,
     "min_image_seconds": int, "max_image_seconds": int, "queue_max": int, "queue_expiry_seconds": int,
-    "caption_max_chars": int, "active_hours": str, "relay_poll_seconds": int,
+    "caption_max_chars": int, "caption_margin": int, "active_hours": str, "relay_poll_seconds": int,
 }
 SIMPLE_COMMANDS = ("pause", "resume", "skip")
 FILM_COMMANDS = ("play", "seek", "set_start", "set_end", "reset")

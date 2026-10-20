@@ -25,6 +25,7 @@ SETTING_FIELDS: list[tuple[str, str, str]] = [
     ("queue_max", "Taille maximale de la file", "int"),
     ("queue_expiry_seconds", "Expiration d'une image en attente (s)", "int"),
     ("caption_max_chars", "Longueur maximale du texte sous l'image", "int"),
+    ("caption_margin", "Marge sous le texte (px)", "int"),
     ("active_hours", "Plage horaire (HH:MM-HH:MM, vide = toujours)", "str"),
     ("relay_url", "Adresse du relais", "str"),
     ("relay_poll_seconds", "Interrogation du relais (s)", "int"),

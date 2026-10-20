@@ -28,6 +28,10 @@ _ID = re.compile(r"[0-9a-f]{32}")
 _STATUS_FOR_CODE = {"too_large": 413, "format": 415, "corrupt": 422}
 PIPIQUANT_DECIMALS = (1, 200)
 PIPIQUANT_ANGLES = (1, 359)
+def pipiquant_legend(decimals: int, angle: int) -> str:
+    return f"π-piquant • 1 = {angle}° • {decimals} {'décimale' if decimals == 1 else 'décimales'}"
+
+
 PIPIQUANT_SIZE = 800      # grand côté en pixels : la largeur de l'écran
 
 
@@ -177,7 +181,8 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
 
     def fetch_pipiquant(decimals: int, angle: int) -> bytes:
         """Demande le PNG au service π-piquant ; toute panne devient une erreur lisible (jamais le détail du service)."""
-        params = {"source": "pi", "decimales": decimals, "angle": angle, "taille": PIPIQUANT_SIZE}
+        params = {"source": "pi", "decimales": decimals, "angle": angle, "taille": PIPIQUANT_SIZE,
+                  "titre": "non"}      # la légende est écrite par le Pi, en plus gros
         headers = {"Authorization": f"Bearer {config.pipiquant_api_key}"}
         unavailable = HTTPException(502, "Le service π-piquant ne répond pas. Réessayez dans un instant.")
         try:
@@ -209,7 +214,7 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
         angle = rng.randint(*PIPIQUANT_ANGLES)
         data = fetch_pipiquant(decimals, angle)
         try:
-            body = enqueue(seconds, data, "")
+            body = enqueue(seconds, data, pipiquant_legend(decimals, angle))
         except HTTPException as exc:
             if exc.status_code in (413, 415, 422):
                 raise HTTPException(502, "Le service π-piquant a renvoyé une image illisible.") from None
