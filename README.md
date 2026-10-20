@@ -28,7 +28,8 @@ Raspberry Pi) avec quatre apports :
    accompagner l'image : il s'affiche en blanc cerclé de noir (corps de 20 px, 14 px pour la légende d'un π-piquant),
    centré en bas, avec une marge réglable sous le texte (`caption_margin`, 40 px par défaut) pour un écran en partie
    masqué par un cadre.
-3. **Interface terminal** (TUI Textual, au clavier, thème « galaxy » comme [cadav](https://github.com/charlescoiffier/cadav)).
+3. **Interface terminal** (TUI Textual, au clavier, thème « galaxy » comme [cadav](https://github.com/charlescoiffier/cadav)) :
+   lecteur, films (position, départ et fin), file d'images, réglages (dont le mode et les rythmes) et journal.
 4. **Ajout de films simplifié** : glisser-déposer dans un partage réseau, ou `slowmovie add film.mp4`.
 
 ## Aperçu
@@ -41,7 +42,7 @@ Raspberry Pi) avec quatre apports :
   <tr>
     <td align="center" width="20%"><img src="docs/images/web-connexion.png" alt="Écran de connexion : mot de passe, afficher, se souvenir de moi" width="180"><br><sub>Connexion unique, mot de passe affichable</sub></td>
     <td align="center" width="20%"><img src="docs/images/web-mode.png" alt="Onglet Mode : le π-piquant en cours avec sa miniature, le rythme et le titre" width="180"><br><sub>Mode actif : miniature du π-piquant en cours, rythme</sub></td>
-    <td align="center" width="20%"><img src="docs/images/web-envoyer.png" alt="Onglet Envoyer : durée en pastilles, tirer un π-piquant" width="180"><br><sub>Envoyer une image ou un π-piquant</sub></td>
+    <td align="center" width="20%"><img src="docs/images/web-envoyer.png" alt="Onglet Envoyer : durée en pastilles, tirer un π-piquant" width="180"><br><sub>Envoyer une image ou un π-piquant (durée en pastilles)</sub></td>
     <td align="center" width="20%"><img src="docs/images/web-reglages.png" alt="Fenêtre des réglages de SlowMovie : film en cours, films, réglages" width="180"><br><sub>⚙ SlowMovie : film en cours, départ et fin, réglages</sub></td>
     <td align="center" width="20%"><img src="docs/images/web-photos.png" alt="Fenêtre des réglages d'un mode inactif : réglages en attente d'activation" width="180"><br><sub>⚙ d'un mode inactif : réglages envoyés à l'activation</sub></td>
   </tr>
@@ -53,6 +54,10 @@ Raspberry Pi) avec quatre apports :
   <tr>
     <td><img src="docs/images/tui-lecteur.png" alt="TUI : onglet Lecteur" width="460"></td>
     <td><img src="docs/images/tui-films.png" alt="TUI : onglet Films avec position, départ et fin" width="460"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/tui-file.png" alt="TUI : onglet File avec les images en attente et leur texte" width="460"></td>
+    <td></td>
   </tr>
 </table>
 
