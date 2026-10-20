@@ -183,6 +183,22 @@ durée du film ; `0` l'efface. Avec « images au hasard », les images sont tir�
 **Page de confirmation** : après un envoi accepté, la page passe sur `/envoi/<identifiant>`, qui suit l'image
 (reçue, position, affichée) et peut être rechargée ou mise en favori.
 
+## Onglet π-piquant (dessin au hasard)
+
+Un troisième onglet tire au hasard 1 à 200 décimales de π et un angle entier de 1° à 359°, demande le PNG (800 px) au
+service [pi-piquant](https://github.com/charlescoiffier/pi-piquant) et le met dans la file comme une image envoyée
+(même mot de passe d'envoi, mêmes limites). Les autres réglages du dessin gardent leurs valeurs de base.
+
+1. Récupérer la clé de l'API, celle de `API_KEY` dans `~/srv/pi-piquant/api.env` sur le VPS.
+2. L'ajouter dans `~/srv/inkdrop/.env` : `SLOWMOVIE_RELAY_PIPIQUANT_API_KEY=<la clé>` (jamais dans git), puis :
+
+   ```bash
+   cd ~/srv/inkdrop && docker compose up -d --force-recreate
+   ```
+
+   Sans cette clé, l'onglet n'apparaît pas et la route répond 503.
+3. Essai : ouvrir l'onglet, choisir une durée, « Tirer un pi-piquant » ; la page de suivi rappelle les décimales et l'angle tirés.
+
 ## 3. Mac
 
 ```bash

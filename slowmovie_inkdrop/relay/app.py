@@ -4,6 +4,7 @@ from __future__ import annotations
 import hmac
 import json
 import logging
+import random
 import re
 import secrets
 import time
@@ -11,6 +12,7 @@ import uuid
 from collections.abc import Callable
 from pathlib import Path
 
+import httpx
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
@@ -24,6 +26,9 @@ from .store import Store
 log = logging.getLogger("slowmovie.relay")
 _ID = re.compile(r"[0-9a-f]{32}")
 _STATUS_FOR_CODE = {"too_large": 413, "format": 415, "corrupt": 422}
+PIPIQUANT_DECIMALS = (1, 200)
+PIPIQUANT_ANGLES = (1, 359)
+PIPIQUANT_SIZE = 800      # grand côté en pixels : la largeur de l'écran
 
 
 class Ack(BaseModel):
@@ -35,12 +40,16 @@ class CommandAck(BaseModel):
     message: str = ""
 
 
-def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -> FastAPI:
+def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
+               http_client: httpx.Client | None = None, rng: random.Random | None = None) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     store = Store(config.data_dir)
     limiter = RateLimiter(clock)
     admin_limiter = RateLimiter(clock)
     admin_enabled = bool(config.admin_password_hash)
+    pipiquant_enabled = bool(config.pipiquant_api_key)
+    rng = rng or random.SystemRandom()
+    http = http_client or httpx.Client(timeout=config.pipiquant_timeout, follow_redirects=False)
     session_key = (config.session_secret or secrets.token_hex(32)).encode()
     COOKIE = "sm_admin"
     CSRF_HEADER = "x-requested-with"
@@ -50,9 +59,11 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
     @app.middleware("http")
     async def reject_huge_bodies(request: Request, call_next):
         length = request.headers.get("content-length")
-        if request.method == "POST" and request.url.path == "/api/send" and not length:
+        path = request.url.path
+        if request.method == "POST" and path in ("/api/send", "/api/send-pipiquant") and not length:
             return JSONResponse({"detail": "Taille de l'envoi manquante."}, status_code=411)
-        if length and length.isdigit() and int(length) > config.max_upload_bytes + 65536:
+        limit = 65536 if path == "/api/send-pipiquant" else config.max_upload_bytes + 65536   # ce formulaire n'a pas d'image
+        if length and length.isdigit() and int(length) > limit:
             return JSONResponse({"detail": "Image trop lourde."}, status_code=413)
         return await call_next(request)
 
@@ -115,11 +126,9 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
     def public_config() -> dict:
         return {"min_duration": config.min_duration, "max_duration": config.max_duration,
                 "max_mb": config.max_upload_bytes // (1024 * 1024), "caption_max": config.caption_max,
-                "admin": admin_enabled}
+                "admin": admin_enabled, "pipiquant": pipiquant_enabled}
 
-    @app.post("/api/send", status_code=202)
-    def send(request: Request, password: str = Form(default=""), duration: str = Form(default=""),
-             caption: str = Form(default=""), image: UploadFile = File(...)) -> JSONResponse:
+    def check_sender(request: Request, password: str, duration: str) -> int:
         ip = client_ip(request)
         wait = limiter.blocked(ip)
         if wait > 0:
@@ -138,21 +147,74 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time) -
         if not config.min_duration <= seconds <= config.max_duration:
             raise HTTPException(422, f"Durée invalide : entre {config.min_duration} et "
                                      f"{config.max_duration} secondes.")
-        text_caption = clean_caption(caption, 10_000)
-        if len(text_caption) > config.caption_max:
-            raise HTTPException(422, f"Texte trop long : {config.caption_max} caractères au maximum.")
+        return seconds
+
+    def check_queue() -> None:
         store.purge(clock(), config.expiry_seconds)
         if store.active_count() >= config.queue_max:
             raise HTTPException(409, "La file d'attente est pleine. Réessayez dans quelques minutes.")
-        data = image.file.read(config.max_upload_bytes + 1)
+
+    def enqueue(seconds: int, data: bytes, caption: str) -> dict:
         try:
             png = sanitize_upload(data, max_bytes=config.max_upload_bytes)
         except InvalidImage as exc:
             raise HTTPException(_STATUS_FOR_CODE.get(exc.code, 422), exc.message) from None
         image_id = uuid.uuid4().hex
-        store.add(image_id, seconds, png, clock(), text_caption)
+        store.add(image_id, seconds, png, clock(), caption)
         position, eta = store.position_and_eta(image_id)
-        return JSONResponse({"id": image_id, "position": position, "eta_seconds": eta}, status_code=202)
+        return {"id": image_id, "position": position, "eta_seconds": eta}
+
+    @app.post("/api/send", status_code=202)
+    def send(request: Request, password: str = Form(default=""), duration: str = Form(default=""),
+             caption: str = Form(default=""), image: UploadFile = File(...)) -> JSONResponse:
+        seconds = check_sender(request, password, duration)
+        text_caption = clean_caption(caption, 10_000)
+        if len(text_caption) > config.caption_max:
+            raise HTTPException(422, f"Texte trop long : {config.caption_max} caractères au maximum.")
+        check_queue()
+        data = image.file.read(config.max_upload_bytes + 1)
+        return JSONResponse(enqueue(seconds, data, text_caption), status_code=202)
+
+    def fetch_pipiquant(decimals: int, angle: int) -> bytes:
+        """Demande le PNG au service π-piquant ; toute panne devient une erreur lisible (jamais le détail du service)."""
+        params = {"source": "pi", "decimales": decimals, "angle": angle, "taille": PIPIQUANT_SIZE}
+        headers = {"Authorization": f"Bearer {config.pipiquant_api_key}"}
+        unavailable = HTTPException(502, "Le service π-piquant ne répond pas. Réessayez dans un instant.")
+        try:
+            with http.stream("GET", f"{config.pipiquant_api_url}/api/png", params=params, headers=headers) as r:
+                if r.status_code == 503:
+                    raise HTTPException(503, "Le service π-piquant est saturé. Réessayez dans un instant.")
+                if r.status_code != 200 or not r.headers.get("content-type", "").startswith("image/png"):
+                    log.error("π-piquant a répondu %s", r.status_code)
+                    raise HTTPException(502, "Le service π-piquant a refusé la demande.")
+                data = bytearray()
+                for chunk in r.iter_bytes():
+                    data += chunk
+                    if len(data) > config.max_upload_bytes:
+                        log.error("π-piquant a renvoyé une image trop lourde")
+                        raise HTTPException(502, "Le service π-piquant a renvoyé une image trop lourde.")
+                return bytes(data)
+        except httpx.HTTPError as exc:
+            log.error("π-piquant injoignable : %s", type(exc).__name__)
+            raise unavailable from None
+
+    @app.post("/api/send-pipiquant", status_code=202)
+    def send_pipiquant(request: Request, password: str = Form(default=""),
+                       duration: str = Form(default="")) -> JSONResponse:
+        if not pipiquant_enabled:
+            raise HTTPException(503, "Le pi-piquant est désactivé.")
+        seconds = check_sender(request, password, duration)
+        check_queue()
+        decimals = rng.randint(*PIPIQUANT_DECIMALS)
+        angle = rng.randint(*PIPIQUANT_ANGLES)
+        data = fetch_pipiquant(decimals, angle)
+        try:
+            body = enqueue(seconds, data, "")
+        except HTTPException as exc:
+            if exc.status_code in (413, 415, 422):
+                raise HTTPException(502, "Le service π-piquant a renvoyé une image illisible.") from None
+            raise
+        return JSONResponse({**body, "decimals": decimals, "angle": angle}, status_code=202)
 
     @app.get("/api/status/{image_id}")
     def status(image_id: str) -> dict:

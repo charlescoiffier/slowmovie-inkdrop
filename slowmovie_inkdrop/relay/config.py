@@ -23,6 +23,9 @@ class RelayConfig:
     command_ttl_seconds: int = 600
     state_max_bytes: int = 65536
     session_seconds: int = 28800
+    pipiquant_api_url: str = "https://pi-piquant.charlescoiffier.fr"
+    pipiquant_api_key: str = ""      # vide : l'onglet π-piquant est désactivé
+    pipiquant_timeout: float = 30.0
 
     @classmethod
     def from_env(cls, env=os.environ) -> RelayConfig:
@@ -41,5 +44,7 @@ class RelayConfig:
             caption_max=int(env.get("SLOWMOVIE_RELAY_CAPTION_MAX", 128)),
             admin_password_hash=env.get("SLOWMOVIE_RELAY_ADMIN_PASSWORD_HASH", ""),
             session_secret=env.get("SLOWMOVIE_RELAY_SESSION_SECRET", ""),
+            pipiquant_api_url=env.get("SLOWMOVIE_RELAY_PIPIQUANT_API_URL", cls.pipiquant_api_url).rstrip("/"),
+            pipiquant_api_key=env.get("SLOWMOVIE_RELAY_PIPIQUANT_API_KEY", ""),
             trust_proxy=env.get("SLOWMOVIE_RELAY_TRUST_PROXY", "") == "1",
         )

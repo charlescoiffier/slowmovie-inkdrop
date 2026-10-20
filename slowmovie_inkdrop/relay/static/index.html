@@ -43,6 +43,7 @@
   <h1>Inkdrop</h1>
   <div role="tablist" aria-label="Sections">
     <button type="button" role="tab" id="tab-send" aria-controls="panel-send" aria-selected="true">Envoyer une image</button>
+    <button type="button" role="tab" id="tab-pi" aria-controls="panel-pi" aria-selected="false" tabindex="-1" hidden>π-piquant</button>
     <button type="button" role="tab" id="tab-admin" aria-controls="panel-admin" aria-selected="false" tabindex="-1" hidden>Réglages</button>
   </div>
 
@@ -63,6 +64,18 @@
       <button id="submit" type="submit">Envoyer</button>
     </form>
     <div id="msg" class="msg" role="status" aria-live="polite"></div>
+  </section>
+
+  <section id="panel-pi" role="tabpanel" aria-labelledby="tab-pi" hidden>
+    <p class="lead">Un dessin au hasard d'après les décimales de π, d'après François Morellet : le nombre de décimales (1 à 200) et l'angle (1° à 359°) sont tirés au sort.</p>
+    <form id="pi-form">
+      <label for="pi-duration">Durée d'affichage</label>
+      <select id="pi-duration" name="duration"></select>
+      <label for="pi-password">Mot de passe</label>
+      <input id="pi-password" name="password" type="password" autocomplete="current-password" required>
+      <button id="pi-submit" type="submit">Tirer un pi-piquant</button>
+    </form>
+    <div id="pi-msg" class="msg" role="status" aria-live="polite"></div>
   </section>
 
   <section id="panel-admin" role="tabpanel" aria-labelledby="tab-admin" hidden>
@@ -86,7 +99,7 @@ function stored(key, value) {
 function say(id, text, cls) { $(id).textContent = text; $(id).className = "msg " + (cls || ""); }
 
 /* ---- onglets ---- */
-const tabs = [$("tab-send"), $("tab-admin")];
+const tabs = [$("tab-send"), $("tab-pi"), $("tab-admin")];
 function selectTab(tab) {
   for (const t of tabs) {
     const on = t === tab;
@@ -109,12 +122,15 @@ for (const t of tabs) {
 
 /* ---- envoi d'une image ---- */
 fetch("/api/config").then((r) => r.json()).then((c) => {
-  for (const [s, label] of PRESETS) if (s >= c.min_duration && s <= c.max_duration) $("duration").add(new Option(label, s));
+  for (const [s, label] of PRESETS) if (s >= c.min_duration && s <= c.max_duration) {
+    $("duration").add(new Option(label, s)); $("pi-duration").add(new Option(label, s));
+  }
   if (c.caption_max) { $("caption").maxLength = c.caption_max; countCaption(); }
   if (c.admin) $("tab-admin").hidden = false;
+  if (c.pipiquant) $("tab-pi").hidden = false;
 }).catch(() => PRESETS.forEach(([s, l]) => $("duration").add(new Option(l, s))));
 const saved = stored("sm-password");
-if (saved) { $("password").value = saved; $("remember").checked = true; }
+if (saved) { $("password").value = saved; $("pi-password").value = saved; $("remember").checked = true; }
 function countCaption() {
   const max = $("caption").maxLength, n = [...$("caption").value].length;
   $("count").textContent = n ? `${n} / ${max}` : "";
@@ -136,6 +152,21 @@ $("form").addEventListener("submit", async (e) => {
   } catch (err) {
     say("msg", "Impossible de joindre le serveur.", "err");
   } finally { $("submit").disabled = false; }
+});
+
+/* ---- pi-piquant au hasard ---- */
+$("pi-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("pi-submit").disabled = true; say("pi-msg", "Dessin en cours…");
+  try {
+    const r = await fetch("/api/send-pipiquant", { method: "POST", body: new FormData($("pi-form")) });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) { say("pi-msg", body.detail || "Erreur " + r.status, "err"); return; }
+    if ($("remember").checked) stored("sm-password", $("pi-password").value);
+    location.assign("/envoi/" + body.id + "?pi=" + body.decimals + "," + body.angle);
+  } catch (err) {
+    say("pi-msg", "Impossible de joindre le serveur.", "err");
+  } finally { $("pi-submit").disabled = false; }
 });
 
 /* ---- administration ---- */

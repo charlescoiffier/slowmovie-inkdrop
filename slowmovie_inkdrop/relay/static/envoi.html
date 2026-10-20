@@ -25,7 +25,9 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const id = location.pathname.split("/").filter(Boolean).pop() || "";
-function show(text, cls, detail) { $("state").textContent = text; $("state").className = cls || ""; $("detail").textContent = detail || ""; }
+function show(text, cls, detail) { $("state").textContent = text; $("state").className = cls || ""; $("detail").textContent = label + (detail || ""); }
+const drawn = /^(\d{1,3}),(\d{1,3})$/.exec(new URLSearchParams(location.search).get("pi") || "");
+const label = drawn ? `Pi-piquant : ${drawn[1]} décimales, angle ${drawn[2]}°. ` : "";
 function hhmm(seconds) {
   return new Date(Date.now() + seconds * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 }

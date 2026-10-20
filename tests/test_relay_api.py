@@ -45,7 +45,7 @@ def test_page_and_config(env):
     client, *_ = env
     assert client.get("/").status_code == 200 and "<form" in client.get("/").text
     assert client.get("/api/config").json() == {"min_duration": 60, "max_duration": 3600, "max_mb": 10,
-                                                "caption_max": 128, "admin": False}
+                                                "caption_max": 128, "admin": False, "pipiquant": False}
 
 
 def test_upload_ok_returns_position_and_eta(env):
