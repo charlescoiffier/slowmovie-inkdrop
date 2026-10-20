@@ -11,15 +11,19 @@ import time
 import uuid
 from collections.abc import Callable
 from pathlib import Path
+from urllib.parse import quote
 
 import httpx
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
+from ..album_url import valid_album_url
 from ..imaging import InvalidImage, clean_caption, sanitize_upload
 from ..remote import FILM_COMMANDS, validate_command
 from .config import RelayConfig
+from .photos import AlbumPhotos, PhotosError
 from .security import RateLimiter, make_session_token, verify_password, verify_session_token
 from .store import Store
 
@@ -46,7 +50,8 @@ class CommandAck(BaseModel):
 
 
 def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
-               http_client: httpx.Client | None = None, rng: random.Random | None = None) -> FastAPI:
+               http_client: httpx.Client | None = None, rng: random.Random | None = None,
+               album_photos: AlbumPhotos | None = None) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     store = Store(config.data_dir)
     limiter = RateLimiter(clock)
@@ -55,6 +60,7 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
     pipiquant_enabled = bool(config.pipiquant_api_key)
     rng = rng or random.SystemRandom()
     http = http_client or httpx.Client(timeout=config.pipiquant_timeout, follow_redirects=False)
+    albums = album_photos or AlbumPhotos(http, max_bytes=config.max_upload_bytes)
     session_key = (config.session_secret or secrets.token_hex(32)).encode()
     COOKIE = "sm_admin"
     CSRF_HEADER = "x-requested-with"
@@ -204,6 +210,13 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
             log.error("π-piquant injoignable : %s", type(exc).__name__)
             raise unavailable from None
 
+    def make_pipiquant(title: bool) -> tuple[bytes, str, int, int]:
+        """Tire un dessin et le demande au service : (image, légende, décimales, angle)."""
+        decimals = rng.randint(*PIPIQUANT_DECIMALS)
+        angle = rng.randint(*PIPIQUANT_ANGLES)
+        data = fetch_pipiquant(decimals, angle)
+        return data, pipiquant_legend(decimals, angle) if title else "", decimals, angle
+
     @app.post("/api/send-pipiquant", status_code=202)
     def send_pipiquant(request: Request, password: str = Form(default=""), duration: str = Form(default=""),
                        title: str = Form(default="oui")) -> JSONResponse:
@@ -213,17 +226,47 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
             raise HTTPException(422, "Choix du titre invalide.")
         seconds = check_sender(request, password, duration)
         check_queue()
-        decimals = rng.randint(*PIPIQUANT_DECIMALS)
-        angle = rng.randint(*PIPIQUANT_ANGLES)
-        data = fetch_pipiquant(decimals, angle)
+        data, legend, decimals, angle = make_pipiquant(title == "oui")
         try:
-            legend = pipiquant_legend(decimals, angle) if title == "oui" else ""
             body = enqueue(seconds, data, legend, PIPIQUANT_CAPTION_SIZE if legend else 0)
         except HTTPException as exc:
             if exc.status_code in (413, 415, 422):
                 raise HTTPException(502, "Le service π-piquant a renvoyé une image illisible.") from None
             raise
         return JSONResponse({**body, "decimals": decimals, "angle": angle}, status_code=202)
+
+    def build_slide(body) -> Response:
+        if not isinstance(body, dict):
+            raise HTTPException(422, "Objet JSON attendu.")
+        source, legend, size = body.get("source"), "", 0
+        if source == "pipiquant":
+            if not isinstance(body.get("title"), bool):
+                raise HTTPException(422, "Le choix du titre doit être vrai ou faux.")
+            if not pipiquant_enabled:
+                raise HTTPException(503, "Le pi-piquant est désactivé.")
+            data, legend, _, _ = make_pipiquant(body["title"])
+            size = PIPIQUANT_CAPTION_SIZE if legend else 0
+        elif source == "photos":
+            url = body.get("album_url")
+            if not valid_album_url(url):
+                raise HTTPException(422, "Lien d'album invalide.")
+            try:
+                data = albums.photo(url)
+            except PhotosError as exc:
+                raise HTTPException(502, exc.message) from None
+        else:
+            raise HTTPException(422, "Source inconnue.")
+        try:
+            png = sanitize_upload(data, max_bytes=config.max_upload_bytes)
+        except InvalidImage:
+            raise HTTPException(502, "L'image reçue est illisible.") from None
+        return Response(png, media_type="image/png",
+                        headers={"X-Slide-Caption": quote(legend, safe=""), "X-Slide-Caption-Size": str(size)})
+
+    @app.post("/api/device/slide", dependencies=[Depends(require_device)])
+    async def device_slide(request: Request) -> Response:
+        body = await read_json(request, 2048)
+        return await run_in_threadpool(build_slide, body)
 
     @app.get("/api/status/{image_id}")
     def status(image_id: str) -> dict:
