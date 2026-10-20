@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from pathlib import Path
@@ -134,6 +135,16 @@ class Store:
                                     "AND created_at >= ? ORDER BY created_at, id", (now - ttl,)).fetchall()
         return [{"id": r["id"], "kind": r["kind"], "payload": json.loads(r["payload"])} for r in rows]
 
+    def pending_mode_command(self, mode: str) -> bool:
+        """Une commande d'activation de ce mode attend encore l'accusé du Pi."""
+        with self._lock:
+            rows = self._db.execute("SELECT payload FROM commands WHERE status = 'pending' AND kind = 'settings'").fetchall()
+        for row in rows:
+            changes = json.loads(row["payload"]).get("changes")
+            if isinstance(changes, dict) and changes.get("mode") == mode:
+                return True
+        return False
+
     def pending_count(self) -> int:
         with self._lock:
             return self._db.execute("SELECT COUNT(*) FROM commands WHERE status = 'pending'").fetchone()[0]
@@ -163,12 +174,16 @@ class Store:
 
     def ack_command(self, command_id: str, status: str, message: str, now: float) -> bool:
         with self._lock:
+            row = self._db.execute("SELECT payload FROM commands WHERE id = ?", (command_id,)).fetchone()
             cursor = self._db.execute("UPDATE commands SET status = ?, message = ?, done_at = ? "
                                       "WHERE id = ? AND status = 'pending'",
                                       (status, message[:300], now, command_id))
             self._redact_finished()
             if cursor.rowcount == 1:
                 self._settle_drafts(command_id, applied=status == "applied")
+                changes = (json.loads(row["payload"]).get("changes") if row else None) or {}
+                if status == "applied" and "photos_album_url" in changes:
+                    self.delete_current_slide("photos")     # la photo de l'ancien album ne doit plus être montrée
             self._db.commit()
             return cursor.rowcount == 1
 
@@ -202,6 +217,11 @@ class Store:
                              (mode, json.dumps(merged)))
             self._db.commit()
 
+    def draft_attached(self, mode: str) -> bool:
+        with self._lock:
+            row = self._db.execute("SELECT command_id FROM mode_drafts WHERE mode = ?", (mode,)).fetchone()
+        return bool(row and row["command_id"])
+
     def clear_draft(self, mode: str) -> None:
         with self._lock:
             self._db.execute("DELETE FROM mode_drafts WHERE mode = ?", (mode,))
@@ -232,8 +252,17 @@ class Store:
 
     # -- dernière diapositive envoyée au Pi (miniature et détails), une par source -------------
     def save_current_slide(self, source: str, details: dict, thumbnail: bytes, now: float) -> None:
-        (self.current_dir / f"{source}.jpg").write_bytes(thumbnail)
-        (self.current_dir / f"{source}.json").write_text(json.dumps({"details": details, "at": now}))
+        for suffix, data in ((".jpg", thumbnail), (".json", json.dumps({"details": details, "at": now}).encode())):
+            tmp = self.current_dir / f"{source}{suffix}.tmp"
+            tmp.write_bytes(data)
+            os.replace(tmp, self.current_dir / f"{source}{suffix}")      # jamais de paire à moitié écrite
+
+    def delete_current_slide(self, source: str) -> None:
+        for suffix in (".jpg", ".json"):
+            try:
+                (self.current_dir / f"{source}{suffix}").unlink()
+            except OSError:
+                pass
 
     def current_slide(self, source: str) -> tuple[dict, bytes, float] | None:
         try:

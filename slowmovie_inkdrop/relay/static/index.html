@@ -75,6 +75,7 @@
       <button type="button" id="login-eye" class="plain" aria-pressed="false" aria-controls="login-password">Afficher</button>
     </div>
     <label class="check"><input id="login-remember" type="checkbox"> Se souvenir de moi</label>
+    <div class="hint">Le mot de passe est alors gardé sur cet appareil.</div>
     <button id="login-submit" type="submit">Se connecter</button>
   </form>
   <div id="login-msg" class="msg" role="status" aria-live="polite"></div>
@@ -219,8 +220,12 @@ function eye(buttonId, inputId) {
 }
 eye("login-eye", "login-password");
 eye("admin-eye", "admin-password");
+let loginStatus = 0;
 async function login(password, remember) {
-  const r = await api("/api/mode/state", { method: "POST", body: JSON.stringify({ password }) });
+  let r;
+  try { r = await api("/api/mode/state", { method: "POST", body: JSON.stringify({ password }) }); }
+  catch (err) { loginStatus = 0; say("login-msg", "Impossible de joindre le serveur.", "err"); return false; }
+  loginStatus = r.status;
   if (!r.ok) { say("login-msg", r.body.detail || "Erreur " + r.status, "err"); return false; }
   generalPassword = password;
   stored("sm-password", remember ? password : null);
@@ -232,6 +237,7 @@ async function login(password, remember) {
 }
 function logout(message) {
   generalPassword = ""; stopPolling(); closeModal(); stored("sm-password", null);
+  api("/api/admin/logout", { method: "POST" }).catch(() => {});       // la session administrateur ne survit pas à la déconnexion
   $("app").hidden = true; $("login").hidden = false;
   $("login-password").value = ""; $("login-password").type = "password"; $("login-eye").textContent = "Afficher";
   modeState = null; slideCards.pipiquant = null; slideCards.photos = null; renderMode();
@@ -348,7 +354,8 @@ async function modeCall(route, payload = {}, quiet = false) {
   if (!generalPassword) return null;
   const r = await api("/api/mode/" + route, { method: "POST", body: JSON.stringify({ password: generalPassword, ...payload }) });
   if (!r.ok) {
-    if (r.status === 401 || r.status === 429) { logout(r.body.detail || "Erreur " + r.status); return null; }
+    const refused = r.status === 401 || (r.status === 429 && (r.body.detail || "").includes("essais"));
+    if (refused) { logout(r.body.detail || "Erreur " + r.status); return null; }
     if (!quiet) say("mode-msg", r.body.detail || "Erreur " + r.status, "err");
     return null;
   }
@@ -377,7 +384,7 @@ async function refreshMode() {
 async function loadCurrent(source) {
   slideCards[source] = (await modeCall("current", { source }, true)) || slideCards[source];
   renderMode();
-  if (!$("modal").hidden) refresh(true);
+  if (!$("modal").hidden) refresh(false);
 }
 function startPolling() {
   stopPolling();
@@ -616,7 +623,7 @@ function albumForm(values, pending) {
       values.photos_album_set ? el("button", { type: "button", className: "plain", text: "Retirer le lien", onclick: () => send({ kind: "settings", changes: { photos_album_url: "" } }, "Lien de l'album retiré") }) : el("span")));
 }
 
-function renderCurrentInModal() { if (!$("modal").hidden && adminMode !== "send") refresh(true); }
+function renderCurrentInModal() { if (!$("modal").hidden && adminMode !== "send") refresh(false); }
 
 function render(data, force) {
   const state = data.state;
@@ -640,6 +647,8 @@ function render(data, force) {
     if (adminMode !== "send") {
       if (active) children.push(nowCard(adminMode, { film: state.video ? { name: state.video, position_seconds: state.position_seconds, duration_seconds: state.duration_seconds } : null, displaying: state.mode }));
       else children.push(el("div", { className: "pending", text: "Ce mode n'est pas actif : les changements sont envoyés au Pi à son activation." + (Object.keys(draft).length ? ` (${Object.keys(draft).length} en attente)` : "") }));
+      if (Object.keys(draft).length) children.push(el("div", { className: "actions" }, el("button", { type: "button", className: "plain", id: "clear-draft", text: "Abandonner les réglages en attente",
+        onclick: async () => { const r = await api("/api/admin/draft/clear", { method: "POST", body: JSON.stringify({ mode: adminMode }) }); say("admin-msg", r.ok ? "Réglages en attente abandonnés." : (r.body.detail || "Erreur " + r.status), r.ok ? "ok" : "err"); refresh(true); } })));
     }
     if (adminMode === "slowmovie") {
       children.push(el("h2", { text: "Films" }));
@@ -690,7 +699,10 @@ $("admin-password").addEventListener("keydown", (e) => { if (e.key === "Enter") 
   const saved = stored("sm-password");
   if (saved) {
     $("login-remember").checked = true;
-    if (!(await login(saved, true))) { stored("sm-password", null); $("login-password").focus(); }
+    if (!(await login(saved, true))) {
+      if (loginStatus === 401) stored("sm-password", null);     // seul un refus du mot de passe l'oublie, pas une panne
+      $("login-password").focus();
+    }
   } else $("login-password").focus();
 })();
 </script>

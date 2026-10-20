@@ -128,7 +128,7 @@ def test_film_states_are_shown_in_french_not_as_raw_codes(client):
 def test_the_mode_polling_starts_after_a_login_and_stops_at_the_first_refusal(client):
     html = client.get("/").text
     scripts = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
-    for expected in ("r.status === 401 || r.status === 429", "logout(r.body.detail", "startPolling()", "stopPolling()",
+    for expected in ("r.status === 401 || (r.status === 429", "logout(r.body.detail", "startPolling()", "stopPolling()",
                      "pi_outdated", "actionSeq", "if (!generalPassword) return null"):
         assert expected in scripts, expected
     assert scripts.index("startPolling();") > scripts.index("async function login(")          # jamais avant une connexion
@@ -138,3 +138,21 @@ def test_the_header_title_goes_back_to_the_main_screen(client):
     html = client.get("/").text
     scripts = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
     assert '$("home").addEventListener("click"' in scripts and 'selectMain($("tab-mode"))' in scripts
+
+
+def test_only_a_password_refusal_logs_out_and_logout_ends_the_admin_session(client):
+    html = client.get("/").text
+    scripts = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+    assert 'includes("essais")' in scripts                                  # une file de commandes pleine ne déconnecte pas
+    logout = scripts[scripts.index("function logout("):scripts.index('$("login-form")')]
+    assert "/api/admin/logout" in logout
+    assert "loginStatus === 401" in scripts                               # une panne ne fait pas oublier le mot de passe
+    assert "clear-draft" in scripts and "/api/admin/draft/clear" in scripts
+
+
+def test_the_modal_refresh_never_overwrites_what_is_being_typed(client):
+    html = client.get("/").text
+    scripts = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+    assert "refresh(true)" in scripts                                      # après une action
+    body = scripts[scripts.index("function renderCurrentInModal"):scripts.index("function renderCurrentInModal") + 200]
+    assert "refresh(false)" in body and "refresh(true)" not in body

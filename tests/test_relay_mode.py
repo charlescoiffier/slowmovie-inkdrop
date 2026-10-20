@@ -207,13 +207,19 @@ def test_activation_sends_the_mode_and_the_draft_in_one_command(env):
     assert "drafts" in call(client, "state").json() and call(client, "state").json()["drafts"] == {}
 
 
-def test_a_refused_activation_keeps_the_draft(env):
-    client, _, _ = env
+def test_a_refused_activation_keeps_the_draft_and_the_user_can_discard_it(tmp_path):
+    client, _, _ = make(tmp_path)
+    client.put("/api/device/state", content=json.dumps(STATE), headers=DEVICE)
     call(client, "rhythm", {"source": "photos", "seconds": 600})
-    client.put("/api/device/state", content=json.dumps({**STATE}), headers=DEVICE)
-    command_id = call(client, "set", {"source": "slowmovie"}).json()["id"]
+    command_id = call(client, "set", {"source": "photos"}).json()["id"]
     client.post(f"/api/device/commands/{command_id}/ack", json={"status": "failed", "message": "non"}, headers=DEVICE)
     assert call(client, "state").json()["drafts"]["photos"] == {"photos_interval": 600}
+    admin = TestClient(client.app, base_url="https://testserver")
+    assert admin.post("/api/admin/draft/clear", json={"mode": "photos"}, headers=XRW).status_code == 401
+    admin.post("/api/admin/login", json={"password": ADMIN_PASSWORD}, headers=XRW)
+    assert admin.post("/api/admin/draft/clear", json={"mode": "photos"}, headers=XRW).status_code == 200
+    assert call(client, "state").json()["drafts"] == {}
+    assert admin.post("/api/admin/draft/clear", json={"mode": "../x"}, headers=XRW).status_code == 422
 
 
 def test_the_draft_of_one_mode_never_leaks_into_another_activation(env):
@@ -305,7 +311,7 @@ def test_the_state_carries_the_film_and_what_is_on_screen(env):
 
 def test_current_slide_card(env):
     import base64
-    client, _, _ = env
+    client, clock, _ = env
     assert call(client, "current", {"source": "pipiquant"}).status_code == 404
     store_dir = env[2]
     from slowmovie_inkdrop.relay.store import Store
@@ -316,6 +322,71 @@ def test_current_slide_card(env):
     assert body["details"] == {"decimals": 87, "angle": 214} and body["source"] == "pipiquant"
     assert body["thumbnail"] == "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8thumb").decode()
     assert body["age_seconds"] == 0
+    clock.t += 90
+    assert call(client, "current", {"source": "pipiquant"}).json()["age_seconds"] == 90
     assert call(client, "current", {"source": "slowmovie"}).status_code == 422
     assert call(client, "current", {"source": "../x"}).status_code == 422
     assert call(client, "current", {"source": "photos"}, password="faux").status_code == 401
+
+
+def test_a_draft_edited_while_its_activation_is_pending_goes_out_in_order(tmp_path):
+    client, _, _ = make(tmp_path)
+    client.put("/api/device/state", content=json.dumps(STATE), headers=DEVICE)          # Pi sur pipiquant
+    call(client, "rhythm", {"source": "photos", "seconds": 1800})
+    first = call(client, "set", {"source": "photos"}).json()["id"]
+    r = call(client, "rhythm", {"source": "photos", "seconds": 600})                  # modifié pendant l'envoi
+    assert r.status_code == 202 and "draft" not in r.json()
+    assert [c["changes"] for c in pending(client)] == [{"mode": "photos", "photos_interval": 1800},
+                                                       {"photos_interval": 600}]
+    client.post(f"/api/device/commands/{first}/ack", json={"status": "applied"}, headers=DEVICE)
+    assert call(client, "state").json()["drafts"] == {}
+
+
+def test_a_draft_edited_between_the_ack_and_the_next_snapshot_is_flushed_by_it(tmp_path):
+    client, _, _ = make(tmp_path)
+    client.put("/api/device/state", content=json.dumps(STATE), headers=DEVICE)
+    call(client, "rhythm", {"source": "photos", "seconds": 1800})
+    first = call(client, "set", {"source": "photos"}).json()["id"]
+    client.post(f"/api/device/commands/{first}/ack", json={"status": "applied"}, headers=DEVICE)
+    assert call(client, "rhythm", {"source": "photos", "seconds": 600}).json() == {"draft": True, "mode": "photos"}
+    photos_now = {**STATE, "source": "photos", "settings": {**STATE["settings"], "mode": "photos"}}
+    client.put("/api/device/state", content=json.dumps(photos_now), headers=DEVICE)            # le Pi confirme le mode
+    assert call(client, "state").json()["drafts"] == {}
+    assert pending(client)[-1] == {"kind": "settings", "changes": {"photos_interval": 600}}
+
+
+@pytest.mark.parametrize("mode,changes", [
+    ("slowmovie", {"increment": 0}), ("slowmovie", {"delay": 0}), ("slowmovie", {"subtitle_track": 99}),
+    ("pipiquant", {"pipiquant_interval": 119}), ("photos", {"photos_interval": 86401}),
+])
+def test_a_draft_the_pi_would_refuse_is_refused_up_front(tmp_path, mode, changes):
+    client, _, _ = admin_client(tmp_path)
+    r = client.post("/api/admin/commands", headers=XRW, json={"kind": "settings", "for_mode": mode, "changes": changes})
+    assert r.status_code == 422
+    assert client.get("/api/admin/state", headers=XRW).json()["drafts"] == {}
+    assert call(client, "set", {"source": "slowmovie"}).status_code == 202          # le changement de mode reste possible
+
+
+def test_a_pi_that_does_not_report_a_source_still_gets_settings_at_once(tmp_path):
+    client, _, _ = make(tmp_path)
+    old = {k: v for k, v in STATE.items() if k != "source"}
+    client.put("/api/device/state", content=json.dumps(old), headers=DEVICE)
+    r = call(client, "rhythm", {"source": "photos", "seconds": 600})
+    assert r.status_code == 202 and "draft" not in r.json()
+    assert pending(client) == [{"kind": "settings", "changes": {"photos_interval": 600}}]
+
+
+def test_the_kept_photo_disappears_once_a_new_album_link_is_applied(tmp_path):
+    from slowmovie_inkdrop.relay.store import Store
+    client, _, path = admin_client(tmp_path)
+    Store(path).save_current_slide("photos", {"index": 1, "count": 9}, b"\xff\xd8x", now=1_000_000.0)
+    Store(path).save_current_slide("pipiquant", {"decimals": 5, "angle": 5}, b"\xff\xd8y", now=1_000_000.0)
+    assert call(client, "current", {"source": "photos"}).status_code == 200
+    photos_now = {**STATE, "source": "photos"}
+    client.put("/api/device/state", content=json.dumps(photos_now), headers=DEVICE)
+    command_id = client.post("/api/admin/commands", headers=XRW, json={"kind": "settings", "for_mode": "photos",
+                             "changes": {"photos_album_url": ALBUM}}).json()["id"]
+    assert call(client, "current", {"source": "photos"}).status_code == 200           # pas encore appliqué
+    client.post(f"/api/device/commands/{command_id}/ack", json={"status": "applied"}, headers=DEVICE)
+    assert call(client, "current", {"source": "photos"}).status_code == 404
+    assert call(client, "current", {"source": "pipiquant"}).status_code == 200

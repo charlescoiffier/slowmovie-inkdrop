@@ -23,6 +23,7 @@ from PIL import Image
 from pydantic import BaseModel
 
 from ..album_url import valid_album_url
+from ..config import Settings
 from ..imaging import InvalidImage, clean_caption, sanitize_upload
 from ..remote import FILM_COMMANDS, validate_command
 from .config import RelayConfig
@@ -35,6 +36,18 @@ _ID = re.compile(r"[0-9a-f]{32}")
 _STATUS_FOR_CODE = {"too_large": 413, "format": 415, "corrupt": 422}
 PIPIQUANT_DECIMALS = (1, 200)
 PIPIQUANT_ANGLES = (1, 359)
+def draft_problem(changes: dict) -> str | None:
+    """Les contrôles du Pi appliqués avant de garder un brouillon : un brouillon refusé bloquerait l'activation."""
+    settings = Settings()
+    for name, value in changes.items():
+        if hasattr(settings, name):
+            setattr(settings, name, value)
+    for name, message in settings.problems():
+        if name in changes:
+            return f"{name} {message}"
+    return None
+
+
 def make_thumbnail(png: bytes) -> bytes:
     """Miniature JPEG de la diapositive envoyée au Pi (affichée derrière le mot de passe général)."""
     with Image.open(io.BytesIO(png)) as img:
@@ -342,6 +355,7 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
         if not isinstance(data, dict):
             raise HTTPException(422, "Objet JSON attendu.")
         store.put_state(json.dumps(data), clock())
+        flush_drafts(data.get("source"))
         return {"ok": True}
 
     @app.get("/api/device/commands", dependencies=[Depends(require_device)])
@@ -394,10 +408,28 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
             command = validate_command({"kind": "settings", "changes": changes})
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
-        if active_source() == mode:
-            return queue_settings(command["changes"])
+        state, _, _ = device_online()
+        outdated = isinstance(state, dict) and "source" not in state      # Pi sans modes : comme avant, tout de suite
+        if active_source() == mode or outdated or store.pending_mode_command(mode):
+            return queue_settings(command["changes"])                        # le Pi applique les commandes dans l'ordre
+        problem = draft_problem({**store.draft_for(mode), **command["changes"]})
+        if problem:
+            raise HTTPException(422, problem)
         store.merge_draft(mode, command["changes"])
         return JSONResponse({"draft": True, "mode": mode}, status_code=202)
+
+    def flush_drafts(source: str | None) -> None:
+        """Le mode d'un brouillon est devenu actif (instantané du Pi) : ce qui reste part comme une commande."""
+        if source not in MODE_SOURCES or store.pending_mode_command(source):
+            return
+        draft = store.draft_for(source)
+        if not draft or store.draft_attached(source):
+            return
+        try:
+            queue_settings(draft)
+        except HTTPException:
+            return                                                           # trop de commandes : au prochain instantané
+        store.clear_draft(source)
 
     def queue_settings(changes: dict) -> JSONResponse:
         command = validate_command({"kind": "settings", "changes": changes})
@@ -489,7 +521,7 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
             if not known and not draft.get("photos_album_url"):
                 raise HTTPException(409, "Aucun album n'est configuré (réglages administrateur).")
         response = queue_settings({"mode": source, **draft})
-        if draft:
+        if draft and not store.draft_attached(source):
             store.attach_draft(source, json.loads(response.body)["id"], draft)
         return response
 
@@ -576,6 +608,16 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
         command_id = uuid.uuid4().hex
         store.add_command(command_id, command["kind"], command, clock())
         return JSONResponse({"id": command_id, "online": online}, status_code=202)
+
+    @app.post("/api/admin/draft/clear", dependencies=[Depends(require_admin)])
+    async def admin_clear_draft(request: Request) -> dict:
+        """Abandonne les réglages en attente d'un mode (par exemple un lien d'album saisi par erreur)."""
+        data = await read_json(request, 1024)
+        mode = data.get("mode") if isinstance(data, dict) else None
+        if mode not in MODE_SOURCES:
+            raise HTTPException(422, "Mode inconnu.")
+        store.clear_draft(mode)
+        return {"ok": True}
 
     @app.get("/api/admin/commands/{command_id}", dependencies=[Depends(require_admin)])
     def admin_command_status(command_id: str) -> dict:
