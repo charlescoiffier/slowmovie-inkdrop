@@ -239,3 +239,19 @@ async def test_z_goes_back_to_the_start_point(paths, sent):
         await pilot.pause()
         await pilot.press("z")
         assert sent[-1] == {"cmd": "reset", "video": "metropolis.mp4"}
+
+
+async def test_e_sets_the_end_point(paths, sent):
+    async with SlowMovieApp(paths).run_test() as pilot:
+        await _prompt(pilot, "e", "00:01:20")
+        assert sent[-1] == {"cmd": "set_end", "video": "metropolis.mp4", "seconds": 80.0}
+
+
+async def test_films_table_shows_the_end_column(paths, sent):
+    from slowmovie_inkdrop.starts import StartPoints
+    StartPoints(paths.starts).set_end("metropolis.mp4", 80)
+    async with SlowMovieApp(paths).run_test() as pilot:
+        await pilot.press("2")
+        await pilot.pause()
+        row = pilot.app.query_one("#films-table").get_row_at(0)
+        assert "00:01:20" in row

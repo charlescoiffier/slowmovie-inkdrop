@@ -313,3 +313,12 @@ def test_login_with_a_malformed_body_is_refused_not_crashed(env, content):
     client, *_ = env
     r = client.post("/api/admin/login", content=content, headers={**XRW, "content-type": "application/json"})
     assert r.status_code in (401, 422)
+
+
+def test_set_end_is_a_film_command_the_relay_accepts_and_checks(env):
+    client, *_ = logged_in(env)
+    put_state(client)
+    ok = command(client, {"kind": "set_end", "video": "a.mkv", "seconds": 5400})
+    assert ok.status_code == 202
+    assert command(client, {"kind": "set_end", "video": "a.mkv", "seconds": -1}).status_code == 422
+    assert command(client, {"kind": "set_end", "video": "inconnu.mkv", "seconds": 10}).status_code == 422

@@ -27,7 +27,7 @@ from .theme import GALAXY
 
 STATUS_LABELS = {"ready": "prêt", "pending": "copie en cours…", "error": "illisible"}
 HELP = ("1-5 onglets · Espace pause/reprise · s passer · Entrée valider · q quitter\n"
-        "Films : Entrée lancer, t point de départ, g aller à, z revenir au départ, d supprimer, a ajouter\n"
+        "Films : Entrée lancer, t point de départ, e point de fin, g aller à, z revenir au départ, d supprimer, a ajouter\n"
         "File : x retirer, c vider · Réglages : Entrée modifier\n"
         "Flèche bas depuis les onglets pour entrer dans la liste, Échap pour revenir aux onglets")
 
@@ -69,6 +69,7 @@ class SlowMovieApp(App):
         Binding("space", "toggle_pause", "Pause"), Binding("s", "send('skip')", "Passer"),
         Binding("z", "reset_film", "Revenir au départ", show=False),
         Binding("t", "set_start", "Point de départ", show=False),
+        Binding("e", "set_end", "Point de fin", show=False),
         Binding("g", "seek", "Aller à", show=False),
         Binding("escape", "focus_tabs", "Onglets", show=False),
         Binding("d", "delete_film", "Supprimer", show=False),
@@ -102,7 +103,7 @@ class SlowMovieApp(App):
     def on_mount(self) -> None:
         self.register_theme(GALAXY)
         self.theme = "galaxy"
-        self.query_one("#films-table", DataTable).add_columns("Film", "État", "Avancement", "Position", "Départ")
+        self.query_one("#films-table", DataTable).add_columns("Film", "État", "Avancement", "Position", "Départ", "Fin")
         self.query_one("#queue-table", DataTable).add_columns("Image", "Durée", "Texte")
         self.query_one("#settings-table", DataTable).add_columns("Réglage", "Valeur")
         self.set_interval(2.0, self.refresh_data)
@@ -119,7 +120,8 @@ class SlowMovieApp(App):
         self._fill("#films-table", [
             (r["name"], (r["name"], STATUS_LABELS.get(r["status"], r["status"]),
                          f"{r['percent']} %" if r["percent"] is not None else r["error"],
-                         tc(r["position_seconds"]), tc(r["start_seconds"])))
+                         tc(r["position_seconds"]), tc(r["start_seconds"]),
+                         tc(r["end_seconds"]) if r["end_seconds"] else "—"))
             for r in model.film_rows(self.paths)])
         self._fill("#queue-table", [
             (i["id"], (i["id"][:8], f"{i['duration'] // 60} min", i.get("caption", "")))
@@ -200,6 +202,11 @@ class SlowMovieApp(App):
         film = self._selected_film()
         if film:
             self._ask_timecode("Point de départ", "set_start", film["start_seconds"])
+
+    def action_set_end(self) -> None:
+        film = self._selected_film()
+        if film:
+            self._ask_timecode("Point de fin (0 = aucun)", "set_end", film["end_seconds"])
 
     def action_seek(self) -> None:
         film = self._selected_film()

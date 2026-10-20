@@ -172,8 +172,13 @@ cette extraction, chaque image mettrait près de 2 minutes (mesuré : 22 s sans 
 film Kaguya).
 
 **Point de départ** : il s'applique à la première lecture d'un film, à « Revenir au départ » et quand le film recommence
-en boucle ; il ne déplace pas un film déjà commencé. « Aller à » saute à un timecode tout de suite. Dans la TUI :
-`t` (point de départ), `g` (aller à), `z` (revenir au départ), `↓` depuis les onglets pour entrer dans la liste.
+en boucle ; il ne déplace pas un film déjà commencé. « Aller à » saute à un timecode tout de suite.
+
+**Point de fin** (pour sauter le générique de fin) : quand le film l'atteint, il passe au suivant, ou recommence en
+boucle à son point de départ si la boucle est activée. Le point de fin doit suivre le point de départ et ne pas dépasser la
+durée du film ; `0` l'efface. Avec « images au hasard », les images sont tirées entre le départ et la fin. Dans la TUI :
+`e` ; sur la passerelle : le champ « fin » puis « Régler la fin ». Dans la TUI :
+`t` (point de départ), `e` (point de fin), `g` (aller à), `z` (revenir au départ), `↓` depuis les onglets pour entrer dans la liste.
 
 **Page de confirmation** : après un envoi accepté, la page passe sur `/envoi/<identifiant>`, qui suit l'image
 (reçue, position, affichée) et peut être rechargée ou mise en favori.

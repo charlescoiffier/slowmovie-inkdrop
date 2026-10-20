@@ -54,3 +54,27 @@ def test_start_points_ignore_a_corrupt_file_and_negative_values(tmp_path):
     assert sp.all() == {}
     sp.set("a.mkv", -4)
     assert sp.get("a.mkv") == 0.0
+
+
+def test_end_points_live_next_to_start_points(tmp_path):
+    sp = StartPoints(tmp_path / "films.json")
+    sp.set("a.mkv", 10)
+    sp.set_end("a.mkv", 90)
+    again = StartPoints(tmp_path / "films.json")
+    assert again.get("a.mkv") == 10 and again.get_end("a.mkv") == 90
+    assert again.all() == {"a.mkv": 10.0} and again.ends() == {"a.mkv": 90.0}
+    again.set("a.mkv", 0)                                       # effacer le départ garde la fin
+    assert again.get_end("a.mkv") == 90
+    again.set_end("a.mkv", 0)
+    assert again.ends() == {} and again.all() == {}
+    assert StartPoints(tmp_path / "films.json").path.read_text() == "{}"     # plus d'entrée vide
+
+
+def test_an_end_point_without_a_start_point_and_files_from_before_end_points(tmp_path):
+    import json
+    path = tmp_path / "films.json"
+    path.write_text(json.dumps({"a.mkv": {"start_seconds": 5}}))             # ancien format
+    sp = StartPoints(path)
+    assert sp.get("a.mkv") == 5 and sp.get_end("a.mkv") == 0.0
+    sp.set_end("b.mkv", 50)
+    assert sp.get("b.mkv") == 0.0 and sp.get_end("b.mkv") == 50 and sp.get("a.mkv") == 5

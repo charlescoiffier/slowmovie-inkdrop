@@ -58,3 +58,12 @@ def test_film_rows_report_positions_and_start_points_in_seconds(tmp_path):
 
 def test_subtitle_track_is_a_setting():
     assert "subtitle_track" in {n for n, _, _ in model.SETTING_FIELDS}
+
+
+def test_film_rows_report_the_end_point(tmp_path):
+    from slowmovie_inkdrop.starts import StartPoints
+    paths = Paths(tmp_path)
+    paths.library.write_text(json.dumps({
+        "a.mp4": {"size": 1, "status": "ready", "frames": 2400, "fps": 24.0, "duration": 100.0, "changed_at": 0}}))
+    StartPoints(paths.starts).set_end("a.mp4", 80)
+    assert model.film_rows(paths)[0]["end_seconds"] == 80.0

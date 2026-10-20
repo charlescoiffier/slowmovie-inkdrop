@@ -180,6 +180,12 @@ class Player:
         info = self._info(video)
         return seconds_to_frame(self.starts.get(video.name), info.fps, info.frame_count)
 
+    def _end_frame(self, video: Path) -> int:
+        """Dernière image jouée : le point de fin du film, sinon sa vraie fin."""
+        info = self._info(video)
+        end = self.starts.get_end(video.name)
+        return seconds_to_frame(end, info.fps, info.frame_count) if end > 0 else info.frame_count
+
     def _ready_video(self, name) -> Path | None:
         return next((v for v in self.library.ready() if v.name == name), None)
 
@@ -222,7 +228,8 @@ class Player:
         start = self.clock()
         try:
             if s.random_frames:
-                self.frame = self.rng.randint(0, info.frame_count)
+                low, high = self._start_frame(video), self._end_frame(video)
+                self.frame = self.rng.randint(low, high) if low <= high else self.rng.randint(0, info.frame_count)
             image = self.frames.frame(video, info, self.frame, s,
                                       (self.display.width, self.display.height))
             self.display.prepare()
@@ -248,7 +255,7 @@ class Player:
                     self._load_video(self.rng.choice(videos))
                 return
             self.frame += s.increment
-            if self.frame > self.info.frame_count:
+            if self.frame > self._end_frame(self.video):
                 if not s.loop:
                     following = (self.rng.choice(videos) if s.random_file
                                  else next_video(videos, self.video))
@@ -298,7 +305,7 @@ class Player:
             self.settings = Settings.load(self.paths.conf)
             self.queue.max_items = self.settings.queue_max
             self.queue.expiry_seconds = self.settings.queue_expiry_seconds
-        elif name in ("seek", "set_start", "reset"):
+        elif name in ("seek", "set_start", "set_end", "reset"):
             target = self._ready_video(cmd.get("video"))
             if target is None:
                 return {"ok": False, "error": "film introuvable ou pas encore prêt"}
@@ -307,7 +314,18 @@ class Player:
                 seconds = float(cmd.get("seconds", 0))
                 if not 0 <= seconds <= info.duration:
                     return {"ok": False, "error": "le point de départ dépasse la durée du film"}
+                end = self.starts.get_end(target.name)
+                if end > 0 and seconds >= end:
+                    return {"ok": False, "error": "le point de départ doit précéder le point de fin"}
                 self.starts.set(target.name, seconds)
+            elif name == "set_end":
+                seconds = float(cmd.get("seconds", 0))
+                if seconds != 0:                                  # 0 efface le point de fin
+                    if not 0 < seconds <= info.duration:
+                        return {"ok": False, "error": "le point de fin dépasse la durée du film"}
+                    if seconds <= self.starts.get(target.name):
+                        return {"ok": False, "error": "le point de fin doit suivre le point de départ"}
+                self.starts.set_end(target.name, seconds)
             else:
                 if name == "seek":
                     frame = seconds_to_frame(float(cmd.get("seconds", 0)), info.fps, info.frame_count)
@@ -354,7 +372,7 @@ class Player:
     def remote_snapshot(self, now: float) -> dict:
         """Instantané envoyé au relais : ni jeton, ni adresse du relais."""
         s, info = self.settings, self.info
-        starts = self.starts.all()
+        starts, ends = self.starts.all(), self.starts.ends()
         films = []
         for row in self.library.rows():
             fps = row.get("fps") or 0.0
@@ -362,7 +380,8 @@ class Player:
             films.append({
                 "name": row["name"], "status": row["status"], "duration_seconds": row.get("duration"),
                 "fps": fps, "position_seconds": round(frame / fps, 1) if fps else 0.0,
-                "start_seconds": starts.get(row["name"], 0.0), "error": row.get("error", ""),
+                "start_seconds": starts.get(row["name"], 0.0), "end_seconds": ends.get(row["name"], 0.0),
+                "error": row.get("error", ""),
                 "subtitle_codecs": row.get("subtitle_codecs", []),
             })
         return {

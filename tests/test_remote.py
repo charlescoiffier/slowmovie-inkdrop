@@ -46,6 +46,8 @@ def test_film_commands_are_normalised():
     assert validate_command({"kind": "set_start", "video": "Le film (2013).mkv", "seconds": 0}) == {
         "kind": "set_start", "video": "Le film (2013).mkv", "seconds": 0.0}
     assert validate_command({"kind": "reset", "video": "a.mkv"}) == {"kind": "reset", "video": "a.mkv"}
+    assert validate_command({"kind": "set_end", "video": "a.mkv", "seconds": 5400}) == {
+        "kind": "set_end", "video": "a.mkv", "seconds": 5400.0}
 
 
 @pytest.mark.parametrize("payload", [
@@ -54,6 +56,8 @@ def test_film_commands_are_normalised():
     {"kind": "play", "video": "a\\b.mkv"}, {"kind": "play", "video": ".cache.mkv"},
     {"kind": "play", "video": "a\x00b.mkv"}, {"kind": "play", "video": "x" * 300}, {"kind": "play", "video": 5},
     {"kind": "seek", "video": "a.mkv"}, {"kind": "seek", "video": "a.mkv", "seconds": -1},
+    {"kind": "set_end", "video": "a.mkv"}, {"kind": "set_end", "video": "a.mkv", "seconds": -3},
+    {"kind": "set_end", "video": "../a.mkv", "seconds": 10},
     {"kind": "seek", "video": "a.mkv", "seconds": "10"}, {"kind": "seek", "video": "a.mkv", "seconds": True},
     {"kind": "seek", "video": "a.mkv", "seconds": 10**9},
     {"kind": "set_start", "video": "a.mkv", "seconds": float("nan")},
@@ -74,4 +78,5 @@ def test_settings_command_is_normalised():
 
 
 def test_command_kinds_cover_the_spec():
-    assert set(COMMAND_KINDS) == {"pause", "resume", "skip", "play", "seek", "set_start", "reset", "settings"}
+    assert set(COMMAND_KINDS) == {"pause", "resume", "skip", "play", "seek", "set_start", "set_end", "reset",
+                                  "settings"}

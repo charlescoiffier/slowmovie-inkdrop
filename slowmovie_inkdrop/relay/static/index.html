@@ -200,6 +200,7 @@ async function send(command, label) {
 function filmRow(film, state) {
   const startInput = el("input", { type: "text", value: fmt(film.start_seconds), "aria-label": "Point de départ" });
   const seekInput = el("input", { type: "text", value: fmt(film.position_seconds), "aria-label": "Aller à" });
+  const endInput = el("input", { type: "text", value: film.end_seconds ? fmt(film.end_seconds) : "", placeholder: "fin (0 = aucune)", "aria-label": "Point de fin" });
   const timecode = (input, kind, label) => () => {
     const seconds = parseTimecode(input.value);
     if (seconds === null) return say("admin-msg", "Timecode invalide : utilisez hh:mm:ss.", "err");
@@ -211,14 +212,16 @@ function filmRow(film, state) {
     el("div", { className: "row" },
       el("div", { className: "grow", text: film.name }),
       el("span", { className: "badge", text: film.name === state.video ? "en cours" : film.status })),
-    el("div", { className: "muted hint", text: `Position ${fmt(film.position_seconds)} sur ${fmt(film.duration_seconds)} · départ ${fmt(film.start_seconds)}${subs}` }),
+    el("div", { className: "muted hint", text: `Position ${fmt(film.position_seconds)} sur ${fmt(film.duration_seconds)} · départ ${fmt(film.start_seconds)} · fin ${film.end_seconds ? fmt(film.end_seconds) : "—"}${subs}` }),
     ready ? el("div", { className: "row" },
       el("button", { type: "button", onclick: () => send({ kind: "play", video: film.name }, "Lancer " + film.name), text: "Lancer" }),
       el("button", { type: "button", className: "plain", onclick: () => send({ kind: "reset", video: film.name }, "Retour au départ de " + film.name), text: "Revenir au départ" })) : el("span"),
     ready ? el("div", { className: "row" }, seekInput,
       el("button", { type: "button", className: "plain", onclick: timecode(seekInput, "seek", "Aller dans"), text: "Aller à" }),
       startInput,
-      el("button", { type: "button", className: "plain", onclick: timecode(startInput, "set_start", "Départ de"), text: "Régler le départ" })) : el("span"));
+      el("button", { type: "button", className: "plain", onclick: timecode(startInput, "set_start", "Départ de"), text: "Régler le départ" }),
+      endInput,
+      el("button", { type: "button", className: "plain", onclick: timecode(endInput, "set_end", "Fin de"), text: "Régler la fin" })) : el("span"));
 }
 
 function settingsForm(values) {

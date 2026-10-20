@@ -43,33 +43,60 @@ def frame_to_seconds(frame: int, fps: float) -> float:
 
 
 class StartPoints:
-    """Point de départ (en secondes) de chaque film, dans `films.json`."""
+    """Point de départ et point de fin (en secondes) de chaque film, dans `films.json`."""
 
     def __init__(self, path: Path):
         self.path = Path(path)
         self._lock = threading.Lock()
 
-    def all(self) -> dict[str, float]:
-        with self._lock:
-            return self._read()
-
-    def _read(self) -> dict[str, float]:
+    def _load(self) -> dict[str, dict[str, float]]:
         try:
             data = json.loads(self.path.read_text())
-            return {str(k): float(v["start_seconds"]) for k, v in data.items() if float(v["start_seconds"]) > 0}
-        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            items = data.items()
+        except (OSError, ValueError, AttributeError):
             return {}
+        out: dict[str, dict[str, float]] = {}
+        for name, entry in items:
+            try:
+                start = float(entry.get("start_seconds", 0))
+                end = float(entry.get("end_seconds", 0))
+            except (ValueError, TypeError, AttributeError):
+                continue
+            if start > 0 or end > 0:
+                out[str(name)] = {"start_seconds": max(start, 0.0), "end_seconds": max(end, 0.0)}
+        return out
+
+    def all(self) -> dict[str, float]:
+        """Points de départ non nuls."""
+        with self._lock:
+            return {k: v["start_seconds"] for k, v in self._load().items() if v["start_seconds"] > 0}
+
+    def ends(self) -> dict[str, float]:
+        """Points de fin non nuls."""
+        with self._lock:
+            return {k: v["end_seconds"] for k, v in self._load().items() if v["end_seconds"] > 0}
 
     def get(self, name: str) -> float:
         return self.all().get(name, 0.0)
 
-    def set(self, name: str, seconds: float) -> None:
+    def get_end(self, name: str) -> float:
+        return self.ends().get(name, 0.0)
+
+    def _update(self, name: str, key: str, seconds: float) -> None:
         with self._lock:
-            current = self._read()
-            if seconds > 0:
-                current[name] = float(seconds)
+            raw = self._load()
+            entry = raw.get(name, {"start_seconds": 0.0, "end_seconds": 0.0})
+            entry[key] = float(seconds) if seconds > 0 else 0.0
+            if entry["start_seconds"] > 0 or entry["end_seconds"] > 0:
+                raw[name] = entry
             else:
-                current.pop(name, None)
+                raw.pop(name, None)
             tmp = self.path.with_name(self.path.name + ".tmp")
-            tmp.write_text(json.dumps({k: {"start_seconds": v} for k, v in current.items()}))
+            tmp.write_text(json.dumps(raw))
             os.replace(tmp, self.path)
+
+    def set(self, name: str, seconds: float) -> None:
+        self._update(name, "start_seconds", seconds)
+
+    def set_end(self, name: str, seconds: float) -> None:
+        self._update(name, "end_seconds", seconds)

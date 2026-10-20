@@ -43,7 +43,8 @@ def film_rows(paths: Paths) -> list[dict]:
         entries = json.loads(paths.library.read_text())
     except (OSError, ValueError):
         return []
-    starts = StartPoints(paths.starts).all()
+    points = StartPoints(paths.starts)
+    starts, ends = points.all(), points.ends()
     rows = []
     for name, entry in sorted(entries.items()):
         percent = position = None
@@ -54,7 +55,8 @@ def film_rows(paths: Paths) -> list[dict]:
             position = round(frame_to_seconds(done, fps), 1) if fps else None
         rows.append({"name": name, "status": entry.get("status", "?"), "percent": percent,
                      "error": entry.get("error", ""), "position_seconds": position,
-                     "start_seconds": starts.get(name, 0.0), "duration_seconds": entry.get("duration")})
+                     "start_seconds": starts.get(name, 0.0), "end_seconds": ends.get(name, 0.0),
+                     "duration_seconds": entry.get("duration")})
     return rows
 
 

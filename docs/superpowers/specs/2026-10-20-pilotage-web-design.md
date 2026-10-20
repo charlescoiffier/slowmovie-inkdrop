@@ -70,6 +70,14 @@ Le relais valide la forme (type, taille, film présent dans le dernier instantan
 - `set_start` **ne déplace pas** un film déjà commencé : sa progression reste intacte. `seek` déplace la position **maintenant** (saut dans le film), borné à `[0, durée]`.
 - `play {video}` reprend à la position enregistrée.
 
+### 7 bis. Point de fin par film
+
+Ajouté après coup : `end_seconds` dans `films.json`, commande `set_end {video, seconds}` (`0` efface). Quand la lecture dépasse
+l'image correspondant au point de fin, le lecteur passe au film suivant (ou recommence au point de départ avec la boucle). Le
+point de fin doit être > point de départ et ≤ durée ; `set_start` est refusé s'il atteint le point de fin. Avec
+`random_frames`, les images sont tirées entre départ et fin. TUI : touche `e`, colonne « Fin » ; passerelle : champ et bouton
+« Régler la fin ».
+
 ## 8. Page de confirmation d'envoi
 
 Après `POST /api/send` accepté, le formulaire fait `location.assign("/envoi/<id>")`. `GET /envoi/{id}` sert une page statique qui lit l'identifiant dans l'URL et interroge `/api/status/{id}` toutes les 5 s : « Image reçue », position, heure estimée, puis « affichée » ou « échec / expirée », et un bouton « Envoyer une autre image ». Un identifiant invalide donne une page « Envoi introuvable ». La page ne montre ni image, ni texte, ni mot de passe ; rechargement et favori sont sûrs (aucun renvoi de formulaire).

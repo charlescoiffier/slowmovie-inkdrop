@@ -450,3 +450,86 @@ def test_remote_snapshot_stays_small_with_many_films(make_player):
     names = tuple(f"film numéro {i} avec un nom assez long pour faire du volume.mkv" for i in range(200))
     ctx = make_player(videos=names)
     assert len(json.dumps(ctx.player.remote_snapshot(ctx.clock()))) < 64 * 1024
+
+
+def test_film_moves_to_the_next_one_when_it_reaches_its_end_point(make_player, tmp_path):
+    (tmp_path / "progress").mkdir(exist_ok=True)
+    ctx = make_player(videos=("a.mp4", "b.mp4"))
+    ctx.player.starts.set_end("a.mp4", 10)                        # 10 s = image 240
+    write_progress(tmp_path / "progress", tmp_path / "Videos" / "a.mp4", 238)
+    ctx.player.tick()                                              # affiche 238, avance à 242 : au-delà de la fin
+    assert ctx.paths.now_playing.read_text().endswith("b.mp4")
+    assert read_progress(ctx.paths.progress, tmp_path / "Videos" / "b.mp4") == 0
+
+
+def test_end_point_with_loop_restarts_at_the_start_point(make_player, tmp_path):
+    (tmp_path / "progress").mkdir(exist_ok=True)
+    ctx = make_player(loop=True)
+    ctx.player.starts.set("a.mp4", 5)                              # image 120
+    ctx.player.starts.set_end("a.mp4", 10)                         # image 240
+    write_progress(tmp_path / "progress", tmp_path / "Videos" / "a.mp4", 238)
+    ctx.player.tick()
+    assert read_progress(ctx.paths.progress, ctx.library.videos[0]) == 120
+
+
+def test_a_film_without_an_end_point_still_plays_to_its_real_end(make_player, tmp_path):
+    (tmp_path / "progress").mkdir(exist_ok=True)
+    ctx = make_player(videos=("a.mp4", "b.mp4"))
+    write_progress(tmp_path / "progress", tmp_path / "Videos" / "a.mp4", 900)
+    ctx.player.tick()
+    assert ctx.paths.now_playing.read_text().endswith("a.mp4")      # 904 <= 1000 : on reste sur a
+
+
+def test_set_end_is_validated_and_zero_clears_it(make_player):
+    ctx = make_player()
+    ctx.player.starts.set("a.mp4", 10)
+
+    def run(seconds):
+        fut = ctx.player.submit({"cmd": "set_end", "video": "a.mp4", "seconds": seconds})
+        ctx.player.tick()
+        return fut.result(timeout=1)
+
+    assert run(5)["ok"] is False                                   # avant le départ
+    assert run(10)["ok"] is False                                  # égal au départ
+    assert run(5000)["ok"] is False                                # au-delà de la durée (100 s)
+    assert ctx.player.starts.get_end("a.mp4") == 0.0
+    assert run(20) == {"ok": True} and ctx.player.starts.get_end("a.mp4") == 20.0
+    assert run(0) == {"ok": True} and ctx.player.starts.get_end("a.mp4") == 0.0
+
+
+def test_set_start_must_stay_before_the_end_point(make_player):
+    ctx = make_player()
+    ctx.player.starts.set_end("a.mp4", 20)
+    refused = ctx.player.submit({"cmd": "set_start", "video": "a.mp4", "seconds": 30})
+    ctx.player.tick()
+    assert refused.result(timeout=1)["ok"] is False and ctx.player.starts.get("a.mp4") == 0.0
+    ok = ctx.player.submit({"cmd": "set_start", "video": "a.mp4", "seconds": 10})
+    ctx.player.tick()
+    assert ok.result(timeout=1) == {"ok": True}
+
+
+def test_seeking_past_the_end_point_moves_on_to_the_next_film(make_player):
+    ctx = make_player(videos=("a.mp4", "b.mp4"))
+    ctx.player.starts.set_end("a.mp4", 10)
+    ctx.player.tick()
+    ctx.player.submit({"cmd": "seek", "video": "a.mp4", "seconds": 20})
+    ctx.player.tick()
+    assert ctx.paths.now_playing.read_text().endswith("b.mp4")
+
+
+def test_random_frames_stay_between_the_start_and_end_points(make_player):
+    ctx = make_player(random_frames=True)
+    ctx.player.starts.set("a.mp4", 10)                             # image 240
+    ctx.player.starts.set_end("a.mp4", 20)                         # image 480
+    for _ in range(40):
+        ctx.clock.advance(121)
+        ctx.player.tick()
+    frames = [f for _, f in ctx.frames.calls]
+    assert len(frames) >= 30 and all(240 <= f <= 480 for f in frames)
+
+
+def test_snapshot_reports_the_end_point(make_player):
+    ctx = make_player()
+    ctx.player.starts.set_end("a.mp4", 50)
+    film = ctx.player.remote_snapshot(ctx.clock())["films"][0]
+    assert film["end_seconds"] == 50.0

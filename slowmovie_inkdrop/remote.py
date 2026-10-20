@@ -15,7 +15,7 @@ SETTING_TYPES: dict[str, type] = {
     "caption_max_chars": int, "active_hours": str, "relay_poll_seconds": int,
 }
 SIMPLE_COMMANDS = ("pause", "resume", "skip")
-FILM_COMMANDS = ("play", "seek", "set_start", "reset")
+FILM_COMMANDS = ("play", "seek", "set_start", "set_end", "reset")
 COMMAND_KINDS = SIMPLE_COMMANDS + FILM_COMMANDS + ("settings",)
 POLL_RANGE = (5, 300)
 MAX_INT = 10_000_000
@@ -72,7 +72,7 @@ def validate_command(payload) -> dict:
             or any(c in video for c in "/\\\x00")):
         raise ValueError("nom de film invalide")
     out = {"kind": kind, "video": video}
-    if kind in ("seek", "set_start"):
+    if kind in ("seek", "set_start", "set_end"):
         seconds = payload.get("seconds")
         if not _is_number(seconds) or not 0 <= seconds <= MAX_SECONDS:
             raise ValueError("position invalide")
