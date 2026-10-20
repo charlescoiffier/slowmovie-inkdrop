@@ -37,6 +37,9 @@ def pipiquant_legend(decimals: int, angle: int) -> str:
 
 
 PIPIQUANT_CAPTION_SIZE = 14      # corps (px) de la légende d'un π-piquant
+SLOWMOVIE_RHYTHMS = (30, 60, 120, 300)             # pastilles du mot de passe général, en secondes
+SLIDE_RHYTHMS = (300, 600, 1800, 3600, 10800)
+MODE_SOURCES = ("slowmovie", "pipiquant", "photos")
 PIPIQUANT_SIZE = 800      # grand côté en pixels : la largeur de l'écran
 
 
@@ -56,6 +59,7 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
     store = Store(config.data_dir)
     limiter = RateLimiter(clock)
     admin_limiter = RateLimiter(clock)
+    mode_limiter = RateLimiter(clock)
     admin_enabled = bool(config.admin_password_hash)
     pipiquant_enabled = bool(config.pipiquant_api_key)
     rng = rng or random.SystemRandom()
@@ -323,6 +327,95 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
         if not _ID.fullmatch(command_id) or not store.ack_command(command_id, body.status, body.message, clock()):
             raise HTTPException(404, "Commande introuvable ou déjà traitée.")
         return {"ok": True}
+
+    # -- choix du mode (mot de passe général) -----------------------------
+    async def general_request(request: Request) -> dict:
+        if request.headers.get(CSRF_HEADER) != "slowmovie":
+            raise HTTPException(403, "En-tête de requête manquant.")
+        ip = client_ip(request)
+        wait = mode_limiter.blocked(ip)
+        if wait > 0:
+            raise HTTPException(429, f"Trop d'essais. Réessayez dans {int(wait // 60) + 1} minute(s).")
+        data = await read_json(request, 1024)
+        if not isinstance(data, dict):
+            raise HTTPException(422, "Objet JSON attendu.")
+        password = data.get("password")
+        if not isinstance(password, str) or not verify_password(password, config.password_hash):
+            mode_limiter.fail(ip)
+            log.warning("mot de passe refusé depuis %s", ip)
+            raise HTTPException(401, "Mot de passe incorrect.")
+        mode_limiter.success(ip)
+        return data
+
+    def queue_settings(changes: dict) -> JSONResponse:
+        command = validate_command({"kind": "settings", "changes": changes})
+        store.expire_commands(clock(), config.command_ttl_seconds)
+        if store.pending_count() >= 20:
+            raise HTTPException(429, "Trop de commandes en attente. Réessayez dans un instant.")
+        command_id = uuid.uuid4().hex
+        store.add_command(command_id, command["kind"], command, clock())
+        return JSONResponse({"id": command_id, "online": device_online()[2]}, status_code=202)
+
+    def whole(value):
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+    @app.post("/api/mode/state")
+    async def mode_state(request: Request) -> dict:
+        await general_request(request)
+        state, received, online = device_online()
+        settings = state.get("settings") if isinstance(state, dict) and isinstance(state.get("settings"), dict) else {}
+        source = state.get("source") if isinstance(state, dict) else None
+        next_at, sent_at = (state or {}).get("next_at"), (state or {}).get("sent_at")
+        next_in = None
+        if all(isinstance(v, int | float) and not isinstance(v, bool) for v in (next_at, sent_at)) and next_at > 0:
+            next_in = max(0, int(next_at - sent_at - (clock() - received)))
+        host = settings.get("photos_album_host")
+        error = (state or {}).get("error")
+        return {
+            "online": online, "last_seen_seconds": None if received is None else int(clock() - received),
+            "source": source if source in MODE_SOURCES else None,
+            "rhythms": {"slowmovie": whole(settings.get("delay")), "pipiquant": whole(settings.get("pipiquant_interval")),
+                        "photos": whole(settings.get("photos_interval"))},
+            "title": settings.get("pipiquant_title") if isinstance(settings.get("pipiquant_title"), bool) else None,
+            "album_set": settings.get("photos_album_set") is True,
+            "album_host": host if isinstance(host, str) and valid_album_url(f"https://{host}/x") else "",
+            "next_in_seconds": next_in,
+            "error": error[:200] if isinstance(error, str) else "",
+            "pipiquant_available": pipiquant_enabled,
+            "presets": {"slowmovie": list(SLOWMOVIE_RHYTHMS), "slide": list(SLIDE_RHYTHMS)},
+        }
+
+    @app.post("/api/mode/set", status_code=202)
+    async def mode_set(request: Request) -> JSONResponse:
+        data = await general_request(request)
+        source = data.get("source")
+        if source not in MODE_SOURCES:
+            raise HTTPException(422, "Mode inconnu.")
+        if source == "pipiquant" and not pipiquant_enabled:
+            raise HTTPException(503, "Le pi-piquant est désactivé.")
+        if source == "photos":
+            state, _, _ = device_online()
+            settings = (state or {}).get("settings") if isinstance(state, dict) else None
+            if not isinstance(settings, dict) or settings.get("photos_album_set") is not True:
+                raise HTTPException(409, "Aucun album n'est configuré (réglages administrateur).")
+        return queue_settings({"mode": source})
+
+    @app.post("/api/mode/rhythm", status_code=202)
+    async def mode_rhythm(request: Request) -> JSONResponse:
+        data = await general_request(request)
+        source, seconds = data.get("source"), data.get("seconds")
+        field = {"slowmovie": "delay", "pipiquant": "pipiquant_interval", "photos": "photos_interval"}.get(source)
+        allowed = SLOWMOVIE_RHYTHMS if source == "slowmovie" else SLIDE_RHYTHMS
+        if field is None or isinstance(seconds, bool) or not isinstance(seconds, int) or seconds not in allowed:
+            raise HTTPException(422, "Rythme non proposé.")
+        return queue_settings({field: seconds})
+
+    @app.post("/api/mode/title", status_code=202)
+    async def mode_title(request: Request) -> JSONResponse:
+        data = await general_request(request)
+        if not isinstance(data.get("title"), bool):
+            raise HTTPException(422, "Le choix du titre doit être vrai ou faux.")
+        return queue_settings({"pipiquant_title": data["title"]})
 
     # -- administrateur ----------------------------------------------------
     @app.post("/api/admin/login")

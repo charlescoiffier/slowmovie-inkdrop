@@ -138,13 +138,26 @@ class Store:
             self._db.execute("UPDATE commands SET status = 'expired', done_at = ? "
                              "WHERE status = 'pending' AND created_at < ?", (now, now - ttl))
             self._db.execute("DELETE FROM commands WHERE created_at < ?", (now - 86400,))
+            self._redact_finished()
             self._db.commit()
+
+    def _redact_finished(self) -> None:
+        """Le lien d'un album est un secret : on l'efface des commandes terminées (appliquées, refusées, expirées)."""
+        rows = self._db.execute("SELECT id, payload FROM commands WHERE status != 'pending' "
+                                "AND payload LIKE '%photos_album_url%'").fetchall()
+        for row in rows:
+            payload = json.loads(row["payload"])
+            changes = payload.get("changes") if isinstance(payload, dict) else None
+            if isinstance(changes, dict) and changes.get("photos_album_url") not in (None, "", "***"):
+                changes["photos_album_url"] = "***"
+                self._db.execute("UPDATE commands SET payload = ? WHERE id = ?", (json.dumps(payload), row["id"]))
 
     def ack_command(self, command_id: str, status: str, message: str, now: float) -> bool:
         with self._lock:
             cursor = self._db.execute("UPDATE commands SET status = ?, message = ?, done_at = ? "
                                       "WHERE id = ? AND status = 'pending'",
                                       (status, message[:300], now, command_id))
+            self._redact_finished()
             self._db.commit()
             return cursor.rowcount == 1
 
