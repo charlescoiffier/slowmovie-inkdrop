@@ -145,6 +145,13 @@ CAPTION_MIN_SIZE = 10      # bornes du corps demandé par le relais
 CAPTION_MAX_SIZE = 20      # corps de départ (px) : discret sur l'écran e-paper 7,5"
 
 
+def caption_size_or_zero(value) -> int:
+    """Corps de légende demandé par le relais s'il est entier et dans les bornes, sinon 0 (corps par défaut)."""
+    if isinstance(value, bool) or not isinstance(value, int) or not CAPTION_MIN_SIZE <= value <= CAPTION_MAX_SIZE:
+        return 0
+    return value
+
+
 def draw_caption(img: Image.Image, text: str, *, margin: int = 12, bottom_margin: int = 40,
                  max_lines: int = 3, max_size: int = CAPTION_MAX_SIZE) -> Image.Image:
     """Dessine `text` en blanc cerclé de noir, centré en bas de l'image (copie ; l'original est intact).

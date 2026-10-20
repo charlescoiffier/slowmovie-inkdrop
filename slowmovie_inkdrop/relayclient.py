@@ -8,13 +8,14 @@ import os
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from urllib.parse import unquote
 
 import httpx
 from PIL import Image
 
 from .config import Settings
 from .image_queue import ImageQueue
-from .imaging import CAPTION_MAX_SIZE, CAPTION_MIN_SIZE, clean_caption
+from .imaging import caption_size_or_zero, clean_caption
 from .remote import validate_command
 
 log = logging.getLogger(__name__)
@@ -67,6 +68,34 @@ class RelayClient:
 
     def ack(self, image_id: str, status: str) -> None:
         self._request("POST", f"/api/device/ack/{image_id}", json={"status": status})
+
+    def slide(self, body: dict) -> tuple[bytes, str, int]:
+        """Demande une diapositive : (image, légende, corps de légende). Le corps JSON porte le lien d'album."""
+        url = f"{self.base_url}/api/device/slide"
+        try:
+            with self._client.stream("POST", url, json=body, headers=self._headers) as response:
+                if response.status_code >= 400:
+                    response.read()
+                    detail = ""
+                    try:
+                        payload = response.json()
+                        detail = str(payload.get("detail", "")) if isinstance(payload, dict) else ""
+                    except ValueError:
+                        pass
+                    raise RelayError(detail[:200] or f"relais : HTTP {response.status_code}", response.status_code)
+                data = bytearray()
+                for chunk in response.iter_bytes():
+                    data.extend(chunk)
+                    if len(data) > self.max_download:
+                        raise RelayError("image trop lourde pour le Pi")
+                caption = unquote(response.headers.get("x-slide-caption", ""))
+                try:
+                    size = int(response.headers.get("x-slide-caption-size", "0"))
+                except ValueError:
+                    size = 0
+                return bytes(data), caption, size
+        except httpx.HTTPError as exc:
+            raise RelayError(f"relais injoignable : {type(exc).__name__}") from exc
 
     def put_state(self, snapshot: dict) -> None:
         self._request("PUT", "/api/device/state", json=snapshot)
@@ -239,10 +268,8 @@ def sync_cycle(client: RelayClient, queue: ImageQueue, outbox: AckOutbox, settin
                 continue
             try:
                 caption = clean_caption(str(item.get("caption") or ""), settings.caption_max_chars)
-                size = item.get("caption_size")
-                if isinstance(size, bool) or not isinstance(size, int) or not CAPTION_MIN_SIZE <= size <= CAPTION_MAX_SIZE:
-                    size = 0
-                queue.add(image_id, data, duration, now, caption=caption, caption_size=size)
+                queue.add(image_id, data, duration, now, caption=caption,
+                          caption_size=caption_size_or_zero(item.get("caption_size")))
             except ValueError:
                 log.warning("identifiant refusé par le Pi : %r", image_id)
                 continue
