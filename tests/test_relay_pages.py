@@ -15,12 +15,45 @@ def client(tmp_path):
     return TestClient(create_app(config), base_url="https://testserver")
 
 
-def test_the_main_page_has_two_tabs_and_the_admin_hooks(client):
+def test_the_main_page_has_the_mode_and_send_tabs_with_their_sub_tabs(client):
     html = client.get("/").text
-    for expected in ('role="tablist"', 'id="tab-send"', 'id="tab-admin"', 'role="tabpanel"',
-                     "/api/admin/login", "/api/admin/state", "/api/admin/commands", "X-Requested-With",
-                     'name="caption"', 'location.assign("/envoi/"'):
+    for expected in ('role="tablist"', 'id="tab-mode"', 'id="tab-send"', 'id="panel-mode"', 'id="panel-send"',
+                     'id="sub-slowmovie"', 'id="sub-pipiquant"', 'id="sub-photos"', 'id="sub-image"', 'id="sub-pipi"',
+                     'role="tabpanel"', 'name="caption"', 'id="pi-title"', 'location.assign("/envoi/"',
+                     "/api/send", "/api/send-pipiquant", "c.pipiquant"):
         assert expected in html, expected
+
+
+def test_the_mode_actions_use_the_general_password_routes(client):
+    html = client.get("/").text
+    for expected in ("/api/mode/", '"state"', '"rhythm"', '"set"', '"title"', "data-seconds",
+                     "activate-", "gear-", "mode-password", "mode-title", "X-Requested-With"):
+        assert expected in html, expected
+
+
+def test_each_mode_has_a_settings_button_behind_the_admin_password(client):
+    html = client.get("/").text
+    for expected in ('id="panel-admin"', 'id="admin-login"', 'id="admin-password"', 'id="admin-login-button"',
+                     'id="admin-main"', 'id="admin-back"', "/api/admin/login", "/api/admin/state",
+                     "/api/admin/commands", "openAdmin(source)", "PIPIQUANT_SETTINGS", "PHOTOS_SETTINGS",
+                     "pipiquant_interval", "photos_interval", "photos_album_url"):
+        assert expected in html, expected
+    assert 'id="tab-admin"' not in html                      # l'ancien onglet Réglages a disparu
+
+
+def test_the_album_link_is_never_prefilled(client):
+    html = client.get("/").text
+    scripts = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+    assert "photos_album_url" in scripts
+    for forbidden in ('album-link").value =', "values.photos_album_url", "settings.photos_album_url"):
+        assert forbidden not in scripts, forbidden
+    assert "lien configuré" in scripts
+
+
+def test_the_page_is_compact_and_works_on_a_phone(client):
+    html = client.get("/").text
+    assert "width=device-width" in html and "prefers-color-scheme: dark" in html and "#db4c3f" in html
+    assert "position:fixed" in html                           # barre du bas
 
 
 @pytest.mark.parametrize("path", ["/", "/envoi/" + "a" * 32, "/envoi/nimporte-quoi"])
@@ -41,10 +74,9 @@ def test_the_confirmation_page_follows_the_upload(client):
         assert expected in html, expected
 
 
-def test_the_admin_tab_is_hidden_until_the_relay_says_it_is_enabled(client):
+def test_the_settings_buttons_follow_the_relay_admin_flag(client):
     html = client.get("/").text
-    assert re.search(r'id="tab-admin"[^>]*hidden', html)
-    assert "c.admin" in html
+    assert "c.admin" in html and "hidden: !adminEnabled" in html
 
 
 def test_the_admin_refresh_does_not_wipe_what_the_user_is_typing(client):

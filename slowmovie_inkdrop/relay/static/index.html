@@ -5,133 +5,212 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Inkdrop</title>
 <style>
-  :root { --bg:#fafaf7; --fg:#1b1b1b; --muted:#6b6b66; --line:#d9d8d2; --accent:#1b1b1b; --err:#a3281f; --ok:#256b3a; --card:#f1f0ea; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#161616; --fg:#eeeeea; --muted:#9a9a94; --line:#333; --accent:#eeeeea; --err:#ff8a80; --ok:#7fd49a; --card:#202020; } }
+  :root { --bg:#fff; --fg:#202020; --muted:#808080; --line:#eee; --line2:#ddd; --accent:#db4c3f; --soft:#fdecea; --on:#fff; --err:#d1453b; --ok:#058527; --card:#fafafa; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1e1e1e; --fg:#e8e8e8; --muted:#9a9a9a; --line:#2e2e2e; --line2:#3a3a3a; --accent:#ff7066; --soft:#3a2523; --on:#1e1e1e; --err:#ff8a80; --ok:#7fd49a; --card:#262626; } }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:17px/1.45 system-ui, sans-serif; }
-  main { max-width:38rem; margin:0 auto; padding:1.2rem 16px 3rem; }
-  h1 { font-size:1.4rem; margin:0 0 .75rem; } h2 { font-size:1.05rem; margin:1.4rem 0 .5rem; }
-  [role=tablist] { display:flex; gap:.4rem; border-bottom:1px solid var(--line); margin-bottom:1rem; }
-  [role=tab] { width:auto; margin:0; padding:.55rem .9rem; border:1px solid transparent; border-bottom:none; border-radius:8px 8px 0 0; background:transparent; color:var(--muted); font-weight:600; cursor:pointer; }
-  [role=tab][aria-selected=true] { color:var(--fg); border-color:var(--line); background:var(--card); }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 -apple-system, system-ui, "Segoe UI", sans-serif; }
+  main { max-width:32rem; margin:0 auto; padding:10px 16px 76px; }
+  h1 { font-size:16px; margin:0; } h2 { font-size:12px; margin:14px 0 6px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  header { display:flex; justify-content:space-between; align-items:baseline; padding:2px 0 6px; }
   [hidden] { display:none !important; }
-  p.lead { color:var(--muted); margin:0 0 1rem; }
-  label { display:block; font-weight:600; margin:1.1rem 0 .35rem; }
-  input, select, button { font:inherit; color:inherit; background:transparent; border:1px solid var(--line); border-radius:8px; padding:.6rem .75rem; }
+  [role=tablist].sub { display:flex; gap:16px; border-bottom:1px solid var(--line); margin:0 0 4px; }
+  [role=tablist].sub [role=tab] { background:none; border:0; border-bottom:2px solid transparent; border-radius:0; padding:7px 0; color:var(--muted); font:inherit; font-weight:500; cursor:pointer; }
+  [role=tablist].sub [role=tab][aria-selected=true] { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+  nav.bottom { position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--line2); display:flex; z-index:5; }
+  nav.bottom [role=tab] { flex:1; background:none; border:0; border-radius:0; padding:9px 0 10px; color:var(--muted); font:inherit; font-size:12px; cursor:pointer; }
+  nav.bottom [role=tab] b { display:block; font-size:17px; line-height:1.1; }
+  nav.bottom [role=tab][aria-selected=true] { color:var(--accent); font-weight:600; }
+  label { display:block; font-weight:600; margin:12px 0 4px; font-size:13px; }
+  input, select, button { font:inherit; color:inherit; background:transparent; border:1px solid var(--line2); border-radius:6px; padding:6px 9px; }
   input:not([type=checkbox]), select { width:100%; }
-  button { background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:600; cursor:pointer; }
-  button.plain { background:transparent; color:var(--fg); border-color:var(--line); font-weight:500; }
-  button:disabled { opacity:.5; cursor:default; }
-  form button[type=submit] { width:100%; margin-top:1.4rem; }
-  #preview { display:none; width:100%; max-height:14rem; object-fit:contain; margin-top:.8rem; border:1px solid var(--line); border-radius:8px; }
-  .msg { margin-top:1rem; min-height:1.4rem; } .err { color:var(--err); } .ok { color:var(--ok); }
-  .hint { color:var(--muted); font-weight:400; font-size:.85rem; }
-  .remember { display:flex; gap:.5rem; align-items:center; margin-top:.7rem; font-weight:400; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:.8rem 1rem; margin:.8rem 0; }
-  .row { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; margin:.4rem 0; }
-  .row > .grow { flex:1 1 10rem; min-width:0; overflow-wrap:anywhere; }
-  .row input { width:7.5rem !important; }
-  .film { border-top:1px solid var(--line); padding:.6rem 0; } .film:first-of-type { border-top:none; }
-  .badge { display:inline-block; padding:.05rem .5rem; border-radius:999px; border:1px solid var(--line); font-size:.8rem; color:var(--muted); }
-  .dot { display:inline-block; width:.6rem; height:.6rem; border-radius:50%; margin-right:.4rem; background:var(--err); } .dot.on { background:var(--ok); }
-  .setting { display:grid; grid-template-columns:1fr auto; gap:.5rem; align-items:center; margin:.35rem 0; }
+  button { cursor:pointer; }
+  button.primary, form button[type=submit] { background:var(--accent); color:var(--on); border-color:var(--accent); font-weight:600; }
+  form button[type=submit] { width:100%; margin-top:12px; padding:8px; }
+  button.plain { background:transparent; color:var(--fg); border-color:var(--line2); font-weight:500; }
+  button:disabled { opacity:.45; cursor:default; }
+  .actions { display:flex; gap:8px; margin:10px 0 2px; } .actions .primary { flex:1; padding:8px; }
+  .pills { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; align-items:center; }
+  .pill { border-radius:14px; padding:2px 11px; font-size:13px; color:var(--muted); background:transparent; border:1px solid var(--line2); }
+  .pill[aria-pressed=true] { background:var(--soft); border-color:var(--accent); color:var(--accent); font-weight:600; }
+  .line { display:flex; align-items:center; gap:9px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .line .grow { flex:1; min-width:0; overflow-wrap:anywhere; }
+  .check { display:flex; gap:8px; align-items:center; font-weight:400; margin:8px 0; }
+  .muted, .hint { color:var(--muted); font-size:12.5px; font-weight:400; }
+  .msg { margin-top:10px; min-height:1.3rem; } .err { color:var(--err); } .ok { color:var(--ok); }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; background:var(--muted); } .dot.on { background:var(--ok); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 12px; margin:8px 0; }
+  .row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:4px 0; }
+  .row > .grow { flex:1 1 9rem; min-width:0; overflow-wrap:anywhere; }
+  .row input { width:7rem !important; }
+  .film { border-top:1px solid var(--line); padding:7px 0; } .film:first-of-type { border-top:none; }
+  .badge { display:inline-block; padding:0 8px; border-radius:999px; border:1px solid var(--line2); font-size:12px; color:var(--muted); }
+  .setting { display:grid; grid-template-columns:1fr auto; gap:6px 10px; align-items:center; margin:4px 0; }
+  .setting label { margin:0; font-weight:500; }
   .setting input:not([type=checkbox]) { width:8rem; }
+  #preview { display:none; width:100%; max-height:12rem; object-fit:contain; margin-top:8px; border:1px solid var(--line2); border-radius:6px; }
+  .adminbar { display:flex; align-items:center; gap:10px; padding:4px 0 8px; border-bottom:1px solid var(--line); }
 </style>
 </head>
 <body>
 <main>
-  <h1>Inkdrop</h1>
-  <div role="tablist" aria-label="Sections">
-    <button type="button" role="tab" id="tab-send" aria-controls="panel-send" aria-selected="true">Envoyer une image</button>
-    <button type="button" role="tab" id="tab-pi" aria-controls="panel-pi" aria-selected="false" tabindex="-1" hidden>π-piquant</button>
-    <button type="button" role="tab" id="tab-admin" aria-controls="panel-admin" aria-selected="false" tabindex="-1" hidden>Réglages</button>
-  </div>
+  <header><h1>Inkdrop</h1><span id="top-status" class="muted"></span></header>
 
-  <section id="panel-send" role="tabpanel" aria-labelledby="tab-send">
-    <p class="lead">Elle s'affichera sur l'écran à son tour, pendant la durée choisie.</p>
-    <form id="form">
-      <label for="image">Image (JPEG, PNG ou WebP)</label>
-      <input id="image" name="image" type="file" accept="image/jpeg,image/png,image/webp" required>
-      <img id="preview" alt="Aperçu">
-      <label for="duration">Durée d'affichage</label>
-      <select id="duration" name="duration"></select>
-      <label for="caption">Texte sous l'image <span class="hint">(facultatif)</span></label>
-      <input id="caption" name="caption" type="text" maxlength="128" autocomplete="off">
-      <div id="count" class="hint" aria-live="polite"></div>
-      <label for="password">Mot de passe</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required>
-      <label class="remember"><input id="remember" type="checkbox"> Se souvenir sur cet appareil</label>
-      <button id="submit" type="submit">Envoyer</button>
-    </form>
-    <div id="msg" class="msg" role="status" aria-live="polite"></div>
+  <section id="panel-mode" role="tabpanel" aria-labelledby="tab-mode">
+    <div role="tablist" class="sub" aria-label="Modes">
+      <button type="button" role="tab" id="sub-slowmovie" aria-controls="sp-slowmovie" aria-selected="true">SlowMovie</button>
+      <button type="button" role="tab" id="sub-pipiquant" aria-controls="sp-pipiquant" aria-selected="false" tabindex="-1">π-piquant</button>
+      <button type="button" role="tab" id="sub-photos" aria-controls="sp-photos" aria-selected="false" tabindex="-1">Photos</button>
+    </div>
+    <div class="line" style="border:0;padding-bottom:0">
+      <input id="mode-password" type="password" placeholder="Mot de passe" autocomplete="current-password" aria-label="Mot de passe">
+    </div>
+    <div id="sp-slowmovie" role="tabpanel" aria-labelledby="sub-slowmovie"></div>
+    <div id="sp-pipiquant" role="tabpanel" aria-labelledby="sub-pipiquant" hidden></div>
+    <div id="sp-photos" role="tabpanel" aria-labelledby="sub-photos" hidden></div>
+    <div id="mode-msg" class="msg" role="status" aria-live="polite"></div>
   </section>
 
-  <section id="panel-pi" role="tabpanel" aria-labelledby="tab-pi" hidden>
-    <p class="lead">Un dessin au hasard d'après les décimales de π, d'après François Morellet : le nombre de décimales (1 à 200) et l'angle (1° à 359°) sont tirés au sort.</p>
-    <form id="pi-form">
-      <label for="pi-duration">Durée d'affichage</label>
-      <select id="pi-duration" name="duration"></select>
-      <label class="remember"><input id="pi-title" type="checkbox" checked> Afficher le titre sous le dessin</label>
-      <label for="pi-password">Mot de passe</label>
-      <input id="pi-password" name="password" type="password" autocomplete="current-password" required>
-      <button id="pi-submit" type="submit">Tirer un pi-piquant</button>
-    </form>
-    <div id="pi-msg" class="msg" role="status" aria-live="polite"></div>
+  <section id="panel-send" role="tabpanel" aria-labelledby="tab-send" hidden>
+    <div role="tablist" class="sub" aria-label="Envoyer">
+      <button type="button" role="tab" id="sub-image" aria-controls="sp-image" aria-selected="true">Image</button>
+      <button type="button" role="tab" id="sub-pipi" aria-controls="sp-pipi" aria-selected="false" tabindex="-1" hidden>π-piquant</button>
+    </div>
+    <div id="sp-image" role="tabpanel" aria-labelledby="sub-image">
+      <form id="form">
+        <label for="image">Image (JPEG, PNG ou WebP)</label>
+        <input id="image" name="image" type="file" accept="image/jpeg,image/png,image/webp" required>
+        <img id="preview" alt="Aperçu">
+        <label for="duration">Durée d'affichage</label>
+        <select id="duration" name="duration"></select>
+        <label for="caption">Texte sous l'image <span class="hint">(facultatif)</span></label>
+        <input id="caption" name="caption" type="text" maxlength="128" autocomplete="off">
+        <div id="count" class="hint" aria-live="polite"></div>
+        <label for="password">Mot de passe</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <label class="check"><input id="remember" type="checkbox"> Se souvenir sur cet appareil</label>
+        <button id="submit" type="submit">Envoyer</button>
+      </form>
+      <div id="msg" class="msg" role="status" aria-live="polite"></div>
+    </div>
+    <div id="sp-pipi" role="tabpanel" aria-labelledby="sub-pipi" hidden>
+      <p class="muted">Un dessin tiré au hasard d'après les décimales de π (1 à 200 décimales, angle de 1° à 359°).</p>
+      <form id="pi-form">
+        <label for="pi-duration">Durée d'affichage</label>
+        <select id="pi-duration" name="duration"></select>
+        <label class="check"><input id="pi-title" type="checkbox" checked> Afficher le titre sous le dessin</label>
+        <label for="pi-password">Mot de passe</label>
+        <input id="pi-password" name="password" type="password" autocomplete="current-password" required>
+        <button id="pi-submit" type="submit">Tirer un pi-piquant</button>
+      </form>
+      <div id="pi-msg" class="msg" role="status" aria-live="polite"></div>
+    </div>
   </section>
 
-  <section id="panel-admin" role="tabpanel" aria-labelledby="tab-admin" hidden>
+  <section id="panel-admin" aria-label="Réglages" hidden>
+    <div class="adminbar"><button type="button" id="admin-back" class="plain">← Modes</button><strong id="admin-title"></strong></div>
     <div id="admin-msg" class="msg" role="status" aria-live="polite"></div>
     <div id="admin-login">
-      <p class="lead">Réglages du lecteur, réservés à l'administrateur.</p>
+      <p class="muted">Réglages réservés à l'administrateur.</p>
       <label for="admin-password">Mot de passe administrateur</label>
       <input id="admin-password" type="password" autocomplete="current-password">
-      <div class="row"><button id="admin-login-button" type="button">Se connecter</button></div>
+      <div class="actions"><button id="admin-login-button" type="button" class="primary">Se connecter</button></div>
     </div>
     <div id="admin-status"></div>
     <div id="admin-main" hidden></div>
   </section>
 </main>
+
+<nav class="bottom" role="tablist" aria-label="Sections">
+  <button type="button" role="tab" id="tab-mode" aria-controls="panel-mode" aria-selected="true"><b>◉</b>Mode</button>
+  <button type="button" role="tab" id="tab-send" aria-controls="panel-send" aria-selected="false" tabindex="-1"><b>＋</b>Envoyer</button>
+</nav>
+
 <script>
 const $ = (id) => document.getElementById(id);
+const XRW = { "X-Requested-With": "slowmovie" };
 const PRESETS = [[60, "1 minute"], [300, "5 minutes"], [900, "15 minutes"], [1800, "30 minutes"], [3600, "1 heure"]];
+const SOURCES = { slowmovie: "SlowMovie", pipiquant: "π-piquant", photos: "Photos" };
 function stored(key, value) {
   try { if (value === undefined) return localStorage.getItem(key); if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch (e) { return null; }
 }
 function say(id, text, cls) { $(id).textContent = text; $(id).className = "msg " + (cls || ""); }
-
-/* ---- onglets ---- */
-const tabs = [$("tab-send"), $("tab-pi"), $("tab-admin")];
-function selectTab(tab) {
-  for (const t of tabs) {
-    const on = t === tab;
-    t.setAttribute("aria-selected", on ? "true" : "false");
-    t.tabIndex = on ? 0 : -1;
-    $(t.getAttribute("aria-controls")).hidden = !on;
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "text") node.textContent = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else if (k === "className") node.className = v;
+    else if (k === "disabled") node.disabled = !!v;
+    else if (k === "hidden") node.hidden = !!v;
+    else node.setAttribute(k, v);
   }
-  tab.focus();
-  if (tab === $("tab-admin")) adminStart(); else adminStop();
+  for (const c of children) node.append(c);
+  return node;
 }
-for (const t of tabs) {
-  t.addEventListener("click", () => selectTab(t));
-  t.addEventListener("keydown", (e) => {
-    const visible = tabs.filter((x) => !x.hidden);
-    const i = visible.indexOf(t);
-    if (e.key === "ArrowRight") { e.preventDefault(); selectTab(visible[(i + 1) % visible.length]); }
-    if (e.key === "ArrowLeft") { e.preventDefault(); selectTab(visible[(i - 1 + visible.length) % visible.length]); }
-  });
+async function api(path, options = {}) {
+  const headers = { ...XRW, ...(options.body ? { "Content-Type": "application/json" } : {}) };
+  const r = await fetch(path, { credentials: "same-origin", ...options, headers });
+  const body = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, body };
+}
+function duration(seconds) {
+  if (seconds === null || seconds === undefined) return "—";
+  if (seconds < 60) return seconds + " s";
+  if (seconds < 3600) return Math.round(seconds / 60) + " min";
+  const h = Math.floor(seconds / 3600), m = Math.round(seconds % 3600 / 60);
+  return m ? `${h} h ${m}` : h + " h";
 }
 
-/* ---- envoi d'une image ---- */
+/* ---- onglets (clavier : flèches) ---- */
+function tablist(tabs, onSelect) {
+  function select(tab) {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.setAttribute("aria-selected", on ? "true" : "false");
+      t.tabIndex = on ? 0 : -1;
+      $(t.getAttribute("aria-controls")).hidden = !on;
+    }
+    tab.focus();
+    if (onSelect) onSelect(tab);
+  }
+  for (const t of tabs) {
+    t.addEventListener("click", () => select(t));
+    t.addEventListener("keydown", (e) => {
+      const visible = tabs.filter((x) => !x.hidden);
+      const i = visible.indexOf(t);
+      if (e.key === "ArrowRight") { e.preventDefault(); select(visible[(i + 1) % visible.length]); }
+      if (e.key === "ArrowLeft") { e.preventDefault(); select(visible[(i - 1 + visible.length) % visible.length]); }
+    });
+  }
+  return select;
+}
+let adminOpen = false;
+tablist([$("tab-mode"), $("tab-send")], (tab) => {
+  if (tab === $("tab-send")) { closeAdmin(false); modeStop(); }
+  else { $("panel-admin").hidden = !adminOpen; $("panel-mode").hidden = adminOpen; if (!adminOpen) modeStart(); }
+});
+tablist([$("sub-slowmovie"), $("sub-pipiquant"), $("sub-photos")]);
+tablist([$("sub-image"), $("sub-pipi")]);
+
+/* ---- mot de passe général : saisi une fois, partagé par les formulaires ---- */
+const PASSWORD_FIELDS = ["mode-password", "password", "pi-password"];
+const saved = stored("sm-password");
+if (saved) { for (const id of PASSWORD_FIELDS) $(id).value = saved; $("remember").checked = true; }
+for (const id of PASSWORD_FIELDS) $(id).addEventListener("input", () => { for (const other of PASSWORD_FIELDS) if (other !== id) $(other).value = $(id).value; });
+function rememberPassword(value) { stored("sm-password", $("remember").checked ? value : null); }
+
+/* ---- configuration publique ---- */
+let adminEnabled = true;       // la passerelle sans mot de passe administrateur n'a pas de bouton Réglages
 fetch("/api/config").then((r) => r.json()).then((c) => {
   for (const [s, label] of PRESETS) if (s >= c.min_duration && s <= c.max_duration) {
     $("duration").add(new Option(label, s)); $("pi-duration").add(new Option(label, s));
   }
   if (c.caption_max) { $("caption").maxLength = c.caption_max; countCaption(); }
-  if (c.admin) $("tab-admin").hidden = false;
-  if (c.pipiquant) $("tab-pi").hidden = false;
+  if (c.pipiquant) $("sub-pipi").hidden = false;
+  adminEnabled = !!c.admin; renderMode();
 }).catch(() => PRESETS.forEach(([s, l]) => $("duration").add(new Option(l, s))));
-const saved = stored("sm-password");
-if (saved) { $("password").value = saved; $("pi-password").value = saved; $("remember").checked = true; }
+
+/* ---- envoi d'une image ---- */
 function countCaption() {
   const max = $("caption").maxLength, n = [...$("caption").value].length;
   $("count").textContent = n ? `${n} / ${max}` : "";
@@ -148,14 +227,14 @@ $("form").addEventListener("submit", async (e) => {
     const r = await fetch("/api/send", { method: "POST", body: new FormData($("form")) });
     const body = await r.json().catch(() => ({}));
     if (!r.ok) { say("msg", body.detail || "Erreur " + r.status, "err"); return; }
-    stored("sm-password", $("remember").checked ? $("password").value : null);
+    rememberPassword($("password").value);
     location.assign("/envoi/" + body.id);
   } catch (err) {
     say("msg", "Impossible de joindre le serveur.", "err");
   } finally { $("submit").disabled = false; }
 });
 
-/* ---- pi-piquant au hasard ---- */
+/* ---- envoi d'un pi-piquant au hasard ---- */
 $("pi-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("pi-submit").disabled = true; say("pi-msg", "Dessin en cours…");
@@ -165,15 +244,87 @@ $("pi-form").addEventListener("submit", async (e) => {
     const r = await fetch("/api/send-pipiquant", { method: "POST", body: form });
     const body = await r.json().catch(() => ({}));
     if (!r.ok) { say("pi-msg", body.detail || "Erreur " + r.status, "err"); return; }
-    if ($("remember").checked) stored("sm-password", $("pi-password").value);
+    rememberPassword($("pi-password").value);
     location.assign("/envoi/" + body.id + "?pi=" + body.decimals + "," + body.angle);
   } catch (err) {
     say("pi-msg", "Impossible de joindre le serveur.", "err");
   } finally { $("pi-submit").disabled = false; }
 });
 
-/* ---- administration ---- */
-const SETTINGS = [
+/* ---- choix du mode et du rythme (mot de passe général) ---- */
+let modeState = null;
+let modeTimer = null;
+async function modeCall(route, payload = {}, quiet = false) {
+  const password = $("mode-password").value;
+  if (!password) { if (!quiet) say("mode-msg", "Saisissez le mot de passe.", "err"); return null; }
+  const r = await api("/api/mode/" + route, { method: "POST", body: JSON.stringify({ password, ...payload }) });
+  if (!r.ok) { if (!quiet) say("mode-msg", r.body.detail || "Erreur " + r.status, "err"); return null; }
+  rememberPassword(password);
+  return r.body;
+}
+async function refreshMode(quiet = true) {
+  const state = await modeCall("state", {}, quiet);
+  if (!state) { if (modeState !== null) { modeState = null; renderMode(); } return; }
+  const changed = JSON.stringify(state) !== JSON.stringify(modeState);
+  modeState = state;
+  if (changed) renderMode();
+  $("top-status").textContent = state.online ? "" : "Pi hors ligne";
+}
+function modeStart() { refreshMode(true); modeStop(); modeTimer = setInterval(() => { if (!document.hidden && !$("panel-mode").hidden) refreshMode(); }, 5000); }
+function modeStop() { if (modeTimer) clearInterval(modeTimer); modeTimer = null; }
+async function modeAction(route, payload, label, reached) {
+  say("mode-msg", `${label} : envoi…`);
+  const sent = await modeCall(route, payload);
+  if (!sent) return;
+  say("mode-msg", `${label} : en attente du Pi…`);
+  for (let i = 0; i < 20; i++) {
+    await new Promise((res) => setTimeout(res, 3000));
+    const state = await modeCall("state", {}, true);
+    if (state) { modeState = state; renderMode(); if (reached(state)) return say("mode-msg", `${label} : appliqué.`, "ok"); }
+  }
+  say("mode-msg", `${label} : le Pi n'a pas répondu.`, "err");
+}
+function renderMode() {
+  const s = modeState;
+  for (const source of Object.keys(SOURCES)) {
+    const active = !!s && s.source === source;
+    const unavailable = source === "pipiquant" ? (s && !s.pipiquant_available) : source === "photos" ? (s && !s.album_set) : false;
+    const presets = s ? (source === "slowmovie" ? s.presets.slowmovie : s.presets.slide) : [];
+    const current = s ? s.rhythms[source] : null;
+    const children = [];
+    const next = active && s.next_in_seconds !== null ? ` · prochaine image dans ${duration(s.next_in_seconds)}` : "";
+    children.push(el("div", { className: "line" },
+      el("span", { className: "dot" + (active ? " on" : "") }),
+      el("div", { className: "grow", text: s ? (active ? "Actif" + next : "Inactif") : "Saisissez le mot de passe pour voir l'état." })));
+    if (active && s.error) children.push(el("div", { className: "err", text: s.error }));
+    if (unavailable) children.push(el("div", { className: "hint", text: source === "pipiquant" ? "Le service π-piquant n'est pas configuré sur la passerelle." : "Aucun album : ajoutez son lien dans ⚙ Réglages." }));
+    children.push(el("h2", { text: "Rythme" }));
+    const pills = el("div", { className: "pills" });
+    for (const seconds of presets) {
+      pills.append(el("button", { type: "button", className: "pill", "data-seconds": String(seconds), "aria-pressed": current === seconds ? "true" : "false",
+        onclick: () => modeAction("rhythm", { source, seconds }, `Rythme ${SOURCES[source]} ${duration(seconds)}`, (st) => st.rhythms[source] === seconds), text: duration(seconds) }));
+    }
+    if (current !== null && !presets.includes(current)) pills.append(el("span", { className: "hint", text: `actuel : ${duration(current)}` }));
+    children.push(pills);
+    if (source === "pipiquant") {
+      const box = el("input", { type: "checkbox", id: "mode-title" });
+      box.checked = !!(s && s.title);
+      box.addEventListener("change", () => modeAction("title", { title: box.checked }, "Titre", (st) => st.title === box.checked));
+      children.push(el("label", { className: "check" }, box, el("span", { text: "Afficher le titre sous le dessin" })));
+    }
+    children.push(el("div", { className: "actions" },
+      el("button", { type: "button", className: "primary", id: "activate-" + source, disabled: active || unavailable,
+        onclick: () => modeAction("set", { source }, `Mode ${SOURCES[source]}`, (st) => st.source === source), text: active ? "Mode actif" : "Activer ce mode" }),
+      el("button", { type: "button", className: "plain", id: "gear-" + source, hidden: !adminEnabled, onclick: () => openAdmin(source), text: "⚙ Réglages" })));
+    $("sp-" + source).replaceChildren(...children);
+  }
+}
+$("mode-password").addEventListener("keydown", (e) => { if (e.key === "Enter") refreshMode(false); });
+$("mode-password").addEventListener("change", () => refreshMode(false));
+renderMode();
+
+/* ---- réglages d'un mode (mot de passe administrateur) ---- */
+const SLOWMOVIE_SETTINGS = [
   ["delay", "Délai entre deux images (s)", "int"], ["increment", "Images avancées à chaque rafraîchissement", "int"],
   ["random_file", "Film au hasard", "bool"], ["random_frames", "Images au hasard", "bool"],
   ["loop", "Boucler sur un seul film", "bool"], ["fullscreen", "Remplir l'écran (recadrer)", "bool"],
@@ -185,28 +336,30 @@ const SETTINGS = [
   ["caption_margin", "Marge sous le texte (px)", "int"],
   ["active_hours", "Plage horaire (HH:MM-HH:MM, vide = toujours)", "str"], ["relay_poll_seconds", "Interrogation du relais (s, 5 à 300)", "int"],
 ];
-const XRW = { "X-Requested-With": "slowmovie" };
+const PIPIQUANT_SETTINGS = [
+  ["pipiquant_interval", "Rythme des π-piquants (s, 120 à 86400)", "int"], ["pipiquant_title", "Afficher le titre sous le dessin", "bool"],
+];
+const PHOTOS_SETTINGS = [["photos_interval", "Rythme des photos (s, 120 à 86400)", "int"]];
+const MODE_SETTINGS = { slowmovie: SLOWMOVIE_SETTINGS, pipiquant: PIPIQUANT_SETTINGS, photos: PHOTOS_SETTINGS };
 const FILM_STATUS = { ready: "prêt", pending: "copie en cours…", error: "illisible" };
+let adminMode = "slowmovie";
 let timer = null;
 let dirty = false;      // une saisie est en cours : on ne reconstruit pas les champs sous les doigts de l'utilisateur
+let adminChanged = true;
 
-async function api(path, options = {}) {
-  const headers = { ...XRW, ...(options.body ? { "Content-Type": "application/json" } : {}) };
-  const r = await fetch(path, { credentials: "same-origin", ...options, headers });
-  const body = await r.json().catch(() => ({}));
-  return { ok: r.ok, status: r.status, body };
+function openAdmin(source) {
+  adminMode = source; adminOpen = true;
+  $("admin-title").textContent = "Réglages — " + SOURCES[source];
+  modeStop();
+  $("panel-mode").hidden = true; $("panel-admin").hidden = false;
+  say("admin-msg", ""); adminStart();
 }
-function el(tag, attrs = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (k === "text") node.textContent = v;
-    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
-    else if (k === "className") node.className = v;
-    else node.setAttribute(k, v);
-  }
-  for (const c of children) node.append(c);
-  return node;
+function closeAdmin(showMode = true) {
+  adminOpen = false; adminStop(); $("panel-admin").hidden = true;
+  if (showMode) { $("panel-mode").hidden = false; modeStart(); }
 }
+$("admin-back").addEventListener("click", () => closeAdmin(true));
+
 function fmt(seconds) {
   const t = Math.max(0, Math.floor(seconds || 0));
   const p = (n) => String(n).padStart(2, "0");
@@ -250,7 +403,7 @@ function filmRow(film, state) {
       el("span", { className: "badge", text: film.name === state.video ? "en cours" : (FILM_STATUS[film.status] || film.status) })),
     el("div", { className: "muted hint", text: `Position ${fmt(film.position_seconds)} sur ${fmt(film.duration_seconds)} · départ ${fmt(film.start_seconds)} · fin ${film.end_seconds ? fmt(film.end_seconds) : "—"}${subs}` }),
     ready ? el("div", { className: "row" },
-      el("button", { type: "button", onclick: () => send({ kind: "play", video: film.name }, "Lancer " + film.name), text: "Lancer" }),
+      el("button", { type: "button", className: "primary", onclick: () => send({ kind: "play", video: film.name }, "Lancer " + film.name), text: "Lancer" }),
       el("button", { type: "button", className: "plain", onclick: () => send({ kind: "reset", video: film.name }, "Retour au départ de " + film.name), text: "Revenir au départ" })) : el("span"),
     ready ? el("div", { className: "row" }, seekInput,
       el("button", { type: "button", className: "plain", onclick: timecode(seekInput, "seek", "Aller dans"), text: "Aller à" })) : el("span"),
@@ -260,17 +413,17 @@ function filmRow(film, state) {
       el("button", { type: "button", className: "plain", onclick: timecode(endInput, "set_end", "Fin de"), text: "Régler la fin" })) : el("span"));
 }
 
-function settingsForm(values) {
+function settingsForm(values, fields) {
   const inputs = {};
   const form = el("div", { className: "card" }, el("strong", { text: "Réglages" }));
-  for (const [name, label, kind] of SETTINGS) {
+  for (const [name, label, kind] of fields) {
     let input;
     if (kind === "bool") { input = el("input", { type: "checkbox", id: "set-" + name }); input.checked = !!values[name]; }
     else { input = el("input", { type: "text", id: "set-" + name, value: String(values[name] ?? "") }); }
     inputs[name] = [input, kind];
     form.append(el("div", { className: "setting" }, el("label", { for: "set-" + name, text: label }), input));
   }
-  form.append(el("div", { className: "row" }, el("button", { type: "button", text: "Appliquer", onclick: () => {
+  form.append(el("div", { className: "actions" }, el("button", { type: "button", className: "primary", text: "Appliquer", onclick: () => {
     const changes = {};
     for (const [name, [input, kind]] of Object.entries(inputs)) {
       let value;
@@ -285,13 +438,29 @@ function settingsForm(values) {
   return form;
 }
 
+/* Lien de l'album : un secret. Champ vide en écriture seule : on n'affiche jamais le lien, seulement « lien configuré ». */
+function albumForm(values) {
+  const input = el("input", { type: "text", id: "album-link", autocomplete: "off", spellcheck: "false", placeholder: values.photos_album_set ? "lien configuré — coller pour remplacer" : "https://photos.app.goo.gl/…", "aria-label": "Lien de partage de l'album" });
+  return el("div", { className: "card" }, el("strong", { text: "Album Google Photos" }),
+    el("div", { className: "hint", text: values.photos_album_set ? `Lien configuré (${values.photos_album_host || "Google Photos"}).` : "Aucun lien configuré. Partagez l'album depuis Google Photos, puis collez le lien ici." }),
+    input,
+    el("div", { className: "actions" },
+      el("button", { type: "button", className: "primary", text: "Enregistrer le lien", onclick: () => {
+        const link = input.value.trim();
+        if (!link) return say("admin-msg", "Collez d'abord le lien de partage.", "err");
+        input.value = "";
+        send({ kind: "settings", changes: { photos_album_url: link } }, "Lien de l'album");
+      } }),
+      values.photos_album_set ? el("button", { type: "button", className: "plain", text: "Retirer le lien", onclick: () => send({ kind: "settings", changes: { photos_album_url: "" } }, "Lien de l'album retiré") }) : el("span")));
+}
+
 function render(data, force) {
   const state = data.state;
   const ago = data.last_seen_seconds === null ? "jamais" : `il y a ${data.last_seen_seconds} s`;
   const statusCard = el("div", { className: "card" },
     el("div", { className: "row" }, el("span", { className: "dot" + (data.online ? " on" : "") }),
       el("strong", { text: data.online ? "Pi en ligne" : "Pi hors ligne" }), el("span", { className: "muted hint", text: `dernier contact : ${ago}` })),
-    state ? el("div", { text: `${state.paused ? "En pause" : state.mode === "IMAGE" ? "Image envoyée affichée" : "Lecture"} · ${state.video || "aucun film"} · ${fmt(state.position_seconds)} / ${fmt(state.duration_seconds)}` }) : el("div", { className: "muted", text: "Aucun état reçu pour l'instant." }),
+    state ? el("div", { text: `${state.paused ? "En pause" : state.mode === "IMAGE" ? "Image envoyée affichée" : state.source && state.source !== "slowmovie" ? "Diaporama " + (SOURCES[state.source] || state.source) : "Lecture"} · ${state.video || "aucun film"} · ${fmt(state.position_seconds)} / ${fmt(state.duration_seconds)}` }) : el("div", { className: "muted", text: "Aucun état reçu pour l'instant." }),
     state && state.error ? el("div", { className: "err", text: state.error }) : el("span"),
     el("div", { className: "row" },
       el("button", { type: "button", className: "plain", onclick: () => send({ kind: state && state.paused ? "resume" : "pause" }, state && state.paused ? "Reprise" : "Pause"), text: state && state.paused ? "Reprendre" : "Pause" }),
@@ -302,13 +471,16 @@ function render(data, force) {
   if (!force && (dirty || typing)) return;
   const children = [];
   if (state) {
-    children.push(el("h2", { text: "Films" }));
-    const list = el("div", { className: "card" });
-    if (!state.films.length) list.append(el("div", { className: "muted", text: "Aucun film sur le Pi." }));
-    for (const film of state.films) list.append(filmRow(film, state));
-    children.push(list);
-    children.push(settingsForm(state.settings || {}));
-    if (state.queue && state.queue.length) {
+    if (adminMode === "slowmovie") {
+      children.push(el("h2", { text: "Films" }));
+      const list = el("div", { className: "card" });
+      if (!state.films.length) list.append(el("div", { className: "muted", text: "Aucun film sur le Pi." }));
+      for (const film of state.films) list.append(filmRow(film, state));
+      children.push(list);
+    }
+    if (adminMode === "photos") children.push(albumForm(state.settings || {}));
+    children.push(settingsForm(state.settings || {}, MODE_SETTINGS[adminMode]));
+    if (adminMode === "slowmovie" && state.queue && state.queue.length) {
       const q = el("div", { className: "card" }, el("strong", { text: "File d'images" }));
       for (const item of state.queue) q.append(el("div", { text: `${Math.round(item.duration / 60)} min${item.caption ? " — " + item.caption : ""}` }));
       children.push(q);
@@ -323,10 +495,11 @@ async function refresh(force = false) {
   if (r.status === 401 || r.status === 403) return showLogin();
   if (!r.ok) return say("admin-msg", r.body.detail || "Erreur " + r.status, "err");
   $("admin-login").hidden = true; $("admin-main").hidden = false;
-  render(r.body, force);
+  render(r.body, force || adminChanged);
+  adminChanged = false;
 }
 function showLogin() { $("admin-login").hidden = false; $("admin-main").hidden = true; $("admin-status").replaceChildren(); }
-function adminStart() { refresh(); adminStop(); timer = setInterval(() => { if (!document.hidden && !$("panel-admin").hidden) refresh(); }, 5000); }
+function adminStart() { adminChanged = true; refresh(); if (timer) clearInterval(timer); timer = setInterval(() => { if (!document.hidden && !$("panel-admin").hidden) refresh(); }, 5000); }
 function adminStop() { if (timer) clearInterval(timer); timer = null; }
 async function logout() { await api("/api/admin/logout", { method: "POST" }); showLogin(); say("admin-msg", "Déconnecté.", "ok"); }
 $("admin-login-button").addEventListener("click", async () => {
@@ -334,10 +507,12 @@ $("admin-login-button").addEventListener("click", async () => {
   $("admin-password").value = "";
   if (!r.ok) return say("admin-msg", r.body.detail || "Erreur " + r.status, "err");
   say("admin-msg", "");
+  adminChanged = true;
   refresh();
 });
 $("admin-main").addEventListener("input", () => { dirty = true; });
 $("admin-password").addEventListener("keydown", (e) => { if (e.key === "Enter") $("admin-login-button").click(); });
+modeStart();
 </script>
 </body>
 </html>

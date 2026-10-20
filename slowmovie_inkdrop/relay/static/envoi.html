@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Envoi en cours</title>
 <style>
-  :root { --bg:#fafaf7; --fg:#1b1b1b; --muted:#6b6b66; --line:#d9d8d2; --accent:#1b1b1b; --err:#a3281f; --ok:#256b3a; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#161616; --fg:#eeeeea; --muted:#9a9a94; --line:#333; --accent:#eeeeea; --err:#ff8a80; --ok:#7fd49a; } }
+  :root { --bg:#fff; --fg:#202020; --muted:#808080; --line:#ddd; --accent:#db4c3f; --on:#fff; --err:#d1453b; --ok:#058527; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1e1e1e; --fg:#e8e8e8; --muted:#9a9a9a; --line:#3a3a3a; --accent:#ff7066; --on:#1e1e1e; --err:#ff8a80; --ok:#7fd49a; } }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:17px/1.45 system-ui, sans-serif; }
-  main { max-width:30rem; margin:0 auto; padding:2rem 16px 3rem; }
-  h1 { font-size:1.4rem; margin:0 0 .5rem; } p { margin:.4rem 0; } .muted { color:var(--muted); }
-  #state { font-size:1.15rem; margin:1.2rem 0 .3rem; } .ok { color:var(--ok); } .err { color:var(--err); }
-  a.button { display:block; text-align:center; margin-top:1.8rem; padding:.7rem .8rem; border-radius:8px; background:var(--accent); color:var(--bg); font-weight:600; text-decoration:none; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 -apple-system, system-ui, "Segoe UI", sans-serif; }
+  main { max-width:32rem; margin:0 auto; padding:14px 16px 3rem; }
+  h1 { font-size:16px; margin:0 0 .4rem; } p { margin:.3rem 0; } .muted { color:var(--muted); }
+  #state { font-size:15px; font-weight:600; margin:.9rem 0 .2rem; } .ok { color:var(--ok); } .err { color:var(--err); }
+  a.button { display:block; text-align:center; margin-top:1.2rem; padding:.55rem .8rem; border-radius:6px; background:var(--accent); color:var(--on); font-weight:600; text-decoration:none; }
 </style>
 </head>
 <body>

@@ -246,10 +246,10 @@ def test_a_body_without_length_or_too_big_is_refused_before_parsing(env):
     assert big.status_code == 413 and not api.calls
 
 
-def test_the_main_page_has_the_pipiquant_tab(env):
+def test_the_main_page_has_the_pipiquant_send_form(env):
     client, _ = env
     html = client.get("/").text
-    for expected in ('id="tab-pi"', 'id="panel-pi"', "/api/send-pipiquant", "c.pipiquant", 'id="pi-title"'):
+    for expected in ('id="sub-pipi"', 'id="sp-pipi"', "/api/send-pipiquant", "c.pipiquant", 'id="pi-title"'):
         assert expected in html, expected
 
 
