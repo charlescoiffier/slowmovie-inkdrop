@@ -10,9 +10,39 @@ Raspberry Pi) avec trois apports :
    forment une file d'attente, protégée par un mot de passe partagé.
    Un **texte** de 128 caractères au plus peut accompagner l'image : il s'affiche en blanc cerclé de noir, centré en bas.
    Un onglet **Réglages** (mot de passe administrateur séparé) permet de piloter le Pi à distance : film, position de
-   départ, sous-titres et réglages.
+   départ et de fin par film (pour sauter les génériques), sous-titres (y compris intégrés au film) et réglages.
 2. **Interface terminal** (TUI Textual, au clavier, thème « galaxy » comme [cadav](https://github.com/charlescoiffier/cadav)).
 3. **Ajout de films simplifié** : glisser-déposer dans un partage réseau, ou `slowmovie add film.mp4`.
+
+## Aperçu
+
+*Captures réalisées avec des données de démonstration (films libres de droits, aucun identifiant réel).*
+
+### Sur la passerelle, depuis un téléphone
+
+<table>
+  <tr>
+    <td align="center" width="25%"><img src="docs/images/web-envoi.png" alt="Formulaire d'envoi d'une image avec son texte" width="230"><br><sub>Envoyer une image, avec un texte et une durée</sub></td>
+    <td align="center" width="25%"><img src="docs/images/web-confirmation.png" alt="Page de confirmation d'envoi" width="230"><br><sub>Page de confirmation : position dans la file</sub></td>
+    <td align="center" width="25%"><img src="docs/images/web-reglages.png" alt="Onglet Réglages : état du Pi et films" width="230"><br><sub>Onglet Réglages : état du Pi, films, départ et fin</sub></td>
+    <td align="center" width="25%"><img src="docs/images/web-reglages-bas.png" alt="Onglet Réglages : réglages du lecteur" width="230"><br><sub>Les mêmes réglages que la TUI</sub></td>
+  </tr>
+</table>
+
+### Dans le terminal (TUI)
+
+<table>
+  <tr>
+    <td><img src="docs/images/tui-lecteur.png" alt="TUI : onglet Lecteur" width="460"></td>
+    <td><img src="docs/images/tui-films.png" alt="TUI : onglet Films avec position, départ et fin" width="460"></td>
+  </tr>
+</table>
+
+### Sur l'écran e-paper
+
+Une image envoyée avec son texte, centré en bas (rendu tramé en 1 bit, comme l'écran) :
+
+<img src="docs/images/ecran-texte.png" alt="Image envoyée avec un texte sous l'image, rendue en noir et blanc" width="480">
 
 ## Architecture
 

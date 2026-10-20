@@ -57,3 +57,9 @@ def test_the_admin_refresh_does_not_wipe_what_the_user_is_typing(client):
 def test_the_admin_page_can_set_the_end_point(client):
     html = client.get("/").text
     assert "set_end" in html and "Régler la fin" in html
+
+
+def test_film_states_are_shown_in_french_not_as_raw_codes(client):
+    html = client.get("/").text
+    for expected in ('ready: "prêt"', 'pending: "copie en cours…"', 'error: "illisible"'):
+        assert expected in html, expected
