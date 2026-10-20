@@ -55,7 +55,7 @@ SLIDE_RHYTHMS = (300, 600, 1800, 3600, 10800, 21600, 43200, 86400)
 # Réglages propres à chaque mode : modifiables à tout moment, transmis au Pi seulement à l'activation du mode.
 DRAFT_FIELDS = {
     "slowmovie": {"delay", "increment", "random_file", "random_frames", "loop", "fullscreen", "subtitles",
-                  "subtitle_track", "timecode", "contrast", "active_hours"},
+                  "subtitle_track", "timecode"},
     "pipiquant": {"pipiquant_interval", "pipiquant_title"},
     "photos": {"photos_interval", "photos_album_url"},
 }

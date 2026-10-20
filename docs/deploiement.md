@@ -188,8 +188,14 @@ durée du film ; `0` l'efface. Avec « images au hasard », les images sont tir�
 La passerelle propose trois modes, un seul actif à la fois : le film (SlowMovie), des π-piquants tirés au hasard, des photos
 d'un album Google Photos. Les envois ponctuels (image, π-piquant) fonctionnent dans les trois modes.
 
-- **Mot de passe général** (celui des envois) : changer de mode, choisir le rythme parmi des valeurs prédéfinies
-  (π-piquant et photos : 5 min, 10 min, 30 min, 1 h, 3 h ; film : 30 s, 1, 2, 5 min) et afficher ou non le titre des π-piquants.
+- **Mot de passe général** (celui des envois), saisi une fois sur l'écran de connexion : changer de mode, choisir le rythme
+  parmi des valeurs prédéfinies (π-piquant et photos : 5 min, 10 min, 30 min, 1, 3, 6, 12, 24 h ; film : 30 s, 1, 2, 5, 10,
+  30 min) et afficher ou non le titre des π-piquants. Chaque mode actif montre une carte « en cours » (film et avancement, ou
+  miniature du dessin / de la photo : la passerelle garde en mémoire la dernière diapositive envoyée au Pi).
+- **Brouillons** : tous les réglages d'un mode **inactif** (pastilles, ⚙, lien de l'album) sont gardés par la passerelle et
+  transmis au Pi, en une seule commande avec le changement de mode, à l'activation de ce mode. Un refus du Pi conserve le
+  brouillon ; le lien de l'album en attente est effacé (fichier de la base compris) dès que le Pi a confirmé.
+  Les actions sur un film et les réglages communs (⚙ de l'onglet Envoyer) restent immédiats.
 - **Mot de passe administrateur** (bouton ⚙ de chaque mode) : tous les réglages du mode, dont le rythme libre (120 s à 24 h)
   et, pour Photos, le **lien de partage de l'album** (`https://photos.app.goo.gl/…`). Le lien est un secret : il n'est ni
   affiché, ni journalisé, ni renvoyé par le Pi ; la passerelle l'efface de son historique dès que le Pi a appliqué le réglage.
@@ -252,3 +258,7 @@ Variables facultatives : `SLOWMOVIE_HOST` (défaut `slomovpi.local`, nom d'hôte
 - [ ] Pendant chaque mode (π-piquant, photos), envoyer une image et un π-piquant ponctuels : ils s'affichent pour leur durée, puis le défilement reprend avec une nouvelle image.
 - [ ] Revenir au mode SlowMovie : le film reprend à sa progression enregistrée. Redémarrer le Pi : le mode actif est conservé.
 - [ ] Vérifier que le lien de l'album n'apparaît dans aucun journal (`docker compose logs`, `journalctl -u slowmovie`).
+- [ ] Écran de connexion : mauvais mot de passe refusé ; « Afficher » montre le mot de passe ; « Se souvenir de moi » : au rechargement, plus de saisie ; « Se déconnecter » oublie le mot de passe.
+- [ ] Modifier le rythme d'un mode inactif : rien ne change à l'écran du Pi ; « Activer ce mode » applique le mode et le rythme choisi en moins de 40 s.
+- [ ] Carte « en cours » : le film dans SlowMovie seulement ; la miniature et les détails (décimales/angle, rang de la photo) dans les autres modes.
+- [ ] ⚙ Réglages s'ouvre en fenêtre ; « Fermer », Échap et le titre « Inkdrop » la referment ; les durées d'envoi sont des pastilles ; l'interrogation du relais est dans le ⚙ de l'onglet Envoyer.

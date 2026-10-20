@@ -15,37 +15,65 @@ def client(tmp_path):
     return TestClient(create_app(config), base_url="https://testserver")
 
 
+def test_the_page_starts_on_a_login_screen_with_one_password_field(client):
+    html = client.get("/").text
+    for expected in ('id="login"', 'id="login-password"', 'id="login-eye"', 'id="login-remember"', "Se souvenir de moi",
+                     'id="logout"', 'type="password"'):
+        assert expected in html, expected
+    assert html.count('type="password"') == 2          # connexion + administrateur : plus de champ dans les modes ni les envois
+    for gone in ('id="mode-password"', 'id="pi-password"', 'name="password"'):
+        assert gone not in html, gone
+
+
 def test_the_main_page_has_the_mode_and_send_tabs_with_their_sub_tabs(client):
     html = client.get("/").text
     for expected in ('role="tablist"', 'id="tab-mode"', 'id="tab-send"', 'id="panel-mode"', 'id="panel-send"',
                      'id="sub-slowmovie"', 'id="sub-pipiquant"', 'id="sub-photos"', 'id="sub-image"', 'id="sub-pipi"',
                      'role="tabpanel"', 'name="caption"', 'id="pi-title"', 'location.assign("/envoi/"',
-                     "/api/send", "/api/send-pipiquant", "c.pipiquant"):
+                     "/api/send", "/api/send-pipiquant", "c.pipiquant", 'id="home"'):
         assert expected in html, expected
+
+
+def test_the_send_durations_are_pills(client):
+    html = client.get("/").text
+    for expected in ('id="duration-pills"', 'id="pi-duration-pills"', 'name="duration" type="hidden"', "durationPills("):
+        assert expected in html, expected
+    assert "<select" not in html
 
 
 def test_the_mode_actions_use_the_general_password_routes(client):
     html = client.get("/").text
-    for expected in ("/api/mode/", '"state"', '"rhythm"', '"set"', '"title"', "data-seconds",
-                     "activate-", "gear-", "mode-password", "mode-title", "X-Requested-With"):
+    for expected in ("/api/mode/", '"state"', '"rhythm"', '"set"', '"title"', '"current"', '"command"', "data-seconds",
+                     "activate-", "gear-", "mode-title", "X-Requested-With", "generalPassword", "nowCard(", "slideCard(",
+                     "filmCard(", "Réglages en attente"):
         assert expected in html, expected
 
 
-def test_each_mode_has_a_settings_button_behind_the_admin_password(client):
+def test_settings_open_in_a_modal_with_a_close_button(client):
     html = client.get("/").text
-    for expected in ('id="panel-admin"', 'id="admin-login"', 'id="admin-password"', 'id="admin-login-button"',
-                     'id="admin-main"', 'id="admin-back"', "/api/admin/login", "/api/admin/state",
-                     "/api/admin/commands", "openAdmin(source)", "PIPIQUANT_SETTINGS", "PHOTOS_SETTINGS",
-                     "pipiquant_interval", "photos_interval", "photos_album_url"):
+    for expected in ('id="modal"', 'role="dialog"', 'aria-modal="true"', 'id="modal-close"', "Fermer", '"Escape"',
+                     'id="panel-admin"', 'id="admin-login"', 'id="admin-password"', 'id="admin-eye"',
+                     'id="admin-login-button"', 'id="admin-main"', 'id="gear-send"', "/api/admin/login",
+                     "/api/admin/state", "/api/admin/commands", "openAdmin(", "PIPIQUANT_SETTINGS", "PHOTOS_SETTINGS",
+                     "SEND_SETTINGS", "relay_poll_seconds", "for_mode", "photos_album_url"):
         assert expected in html, expected
-    assert 'id="tab-admin"' not in html                      # l'ancien onglet Réglages a disparu
+    assert 'id="admin-back"' not in html and "← Modes" not in html
+
+
+def test_the_relay_poll_setting_lives_with_the_send_settings_only(client):
+    html = client.get("/").text
+    scripts = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+    send_block = scripts[scripts.index("const SEND_SETTINGS"):scripts.index("const MODE_SETTINGS")]
+    other = scripts.replace(send_block, "")
+    assert "relay_poll_seconds" in send_block
+    assert "relay_poll_seconds" not in other.split("const SLOWMOVIE_SETTINGS")[1].split("const MODE_SETTINGS")[0]
 
 
 def test_the_album_link_is_never_prefilled(client):
     html = client.get("/").text
     scripts = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
     assert "photos_album_url" in scripts
-    for forbidden in ('album-link").value =', "values.photos_album_url", "settings.photos_album_url"):
+    for forbidden in ('album-link").value =', "values.photos_album_url", "settings.photos_album_url", "drafts.photos.photos_album_url"):
         assert forbidden not in scripts, forbidden
     assert "lien configuré" in scripts
 
@@ -53,7 +81,7 @@ def test_the_album_link_is_never_prefilled(client):
 def test_the_page_is_compact_and_works_on_a_phone(client):
     html = client.get("/").text
     assert "width=device-width" in html and "prefers-color-scheme: dark" in html and "#db4c3f" in html
-    assert "position:fixed" in html                           # barre du bas
+    assert "position:fixed" in html                           # barre du bas et fenêtre modale
 
 
 @pytest.mark.parametrize("path", ["/", "/envoi/" + "a" * 32, "/envoi/nimporte-quoi"])
@@ -97,9 +125,16 @@ def test_film_states_are_shown_in_french_not_as_raw_codes(client):
         assert expected in html, expected
 
 
-def test_the_mode_polling_stops_at_the_first_refusal(client):
+def test_the_mode_polling_starts_after_a_login_and_stops_at_the_first_refusal(client):
     html = client.get("/").text
     scripts = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
-    for expected in ("modeAuthed", "r.status === 401 || r.status === 429", "modeStop()", "lastTried", '"command"',
-                     "pi_outdated", "actionSeq"):
+    for expected in ("r.status === 401 || r.status === 429", "logout(r.body.detail", "startPolling()", "stopPolling()",
+                     "pi_outdated", "actionSeq", "if (!generalPassword) return null"):
         assert expected in scripts, expected
+    assert scripts.index("startPolling();") > scripts.index("async function login(")          # jamais avant une connexion
+
+
+def test_the_header_title_goes_back_to_the_main_screen(client):
+    html = client.get("/").text
+    scripts = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+    assert '$("home").addEventListener("click"' in scripts and 'selectMain($("tab-mode"))' in scripts

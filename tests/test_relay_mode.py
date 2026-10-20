@@ -261,6 +261,8 @@ def test_admin_drafts_are_validated_like_commands_and_limited_to_the_modes_own_f
     assert post({"for_mode": "pipiquant", "changes": {"pipiquant_interval": 5}}).status_code == 422
     assert post({"for_mode": "slowmovie", "changes": {"pipiquant_interval": 600}}).status_code == 422
     assert post({"for_mode": "slowmovie", "changes": {"relay_poll_seconds": 30}}).status_code == 422
+    assert post({"for_mode": "slowmovie", "changes": {"contrast": 1.5}}).status_code == 422       # réglage commun, jamais en brouillon
+    assert post({"for_mode": "slowmovie", "changes": {"active_hours": "08:00-22:00"}}).status_code == 422
     assert post({"for_mode": "autre", "changes": {"delay": 40}}).status_code == 422
     assert post({"for_mode": "photos", "changes": {"photos_album_url": "https://evil.example/x"}}).status_code == 422
     assert post({"for_mode": "slowmovie", "changes": {"delay": "40"}}).status_code == 422

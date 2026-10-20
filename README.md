@@ -12,11 +12,16 @@ Raspberry Pi) avec quatre apports :
    - **Photos** : une photo tirée au hasard dans un album Google Photos (lien de partage, méthode non officielle),
      renouvelée à intervalle régulier.
 
-   Le mot de passe général suffit pour changer de mode, de rythme (pastilles : 5 min à 3 h, ou 30 s à 5 min pour le film)
-   et pour afficher ou non le titre des π-piquants. Le bouton ⚙ de chaque mode ouvre ses réglages complets (mot de passe
-   administrateur séparé) : pour SlowMovie, le film, la position de départ et de fin par film (pour sauter les génériques),
-   les sous-titres (y compris intégrés) et les réglages du lecteur ; pour les π-piquants, le rythme libre et le titre ; pour
-   les photos, le lien de l'album (un secret : jamais affiché ni journalisé) et le rythme.
+   Le mot de passe général se saisit une seule fois, sur un écran de connexion (avec un bouton pour l'afficher et la case
+   « Se souvenir de moi »). Il suffit ensuite pour changer de mode, de rythme (pastilles : 30 s à 30 min pour le film,
+   5 min à 24 h pour les diaporamas) et pour afficher ou non le titre des π-piquants. Chaque mode actif montre une carte
+   « en cours » : le film et son avancement, ou la miniature du π-piquant (décimales, angle) ou de la photo (rang dans l'album).
+   Le bouton ⚙ de chaque mode ouvre ses réglages complets dans une fenêtre (mot de passe administrateur séparé) : pour
+   SlowMovie, le film, la position de départ et de fin par film (pour sauter les génériques), les sous-titres (y compris
+   intégrés) et les réglages du lecteur ; pour les π-piquants, le rythme libre et le titre ; pour les photos, le lien de
+   l'album (un secret : jamais affiché ni journalisé) et le rythme. **Les réglages d'un mode inactif se modifient mais ne
+   sont transmis au Pi qu'à l'activation du mode** (une seule commande). Les réglages communs (interrogation du relais,
+   file d'attente, texte, contraste, plage horaire) sont dans le ⚙ de l'onglet Envoyer.
 2. **Envoi d'images à distance**, dans tous les modes : depuis un téléphone ou un ordinateur, on envoie une image et une
    durée (ou on tire un π-piquant au hasard). Elle remplace le défilement à l'écran pendant ce temps, qui reprend ensuite.
    Les envois forment une file d'attente, protégée par un mot de passe partagé. Un **texte** de 128 caractères au plus peut
@@ -34,11 +39,11 @@ Raspberry Pi) avec quatre apports :
 
 <table>
   <tr>
-    <td align="center" width="20%"><img src="docs/images/web-mode.png" alt="Onglet Mode : le mode π-piquant, son rythme et son titre" width="180"><br><sub>Onglet Mode : activer un mode, choisir son rythme</sub></td>
-    <td align="center" width="20%"><img src="docs/images/web-envoyer.png" alt="Onglet Envoyer : tirer un π-piquant" width="180"><br><sub>Onglet Envoyer : une image ou un π-piquant</sub></td>
-    <td align="center" width="20%"><img src="docs/images/web-confirmation.png" alt="Page de confirmation d'envoi" width="180"><br><sub>Page de suivi, avec retour à l'accueil</sub></td>
-    <td align="center" width="20%"><img src="docs/images/web-reglages.png" alt="Réglages de SlowMovie : état du Pi et films" width="180"><br><sub>⚙ SlowMovie : état du Pi, films, départ et fin</sub></td>
-    <td align="center" width="20%"><img src="docs/images/web-photos.png" alt="Réglages du mode Photos : lien de l'album et rythme" width="180"><br><sub>⚙ Photos : lien de l'album (jamais affiché) et rythme</sub></td>
+    <td align="center" width="20%"><img src="docs/images/web-connexion.png" alt="Écran de connexion : mot de passe, afficher, se souvenir de moi" width="180"><br><sub>Connexion unique, mot de passe affichable</sub></td>
+    <td align="center" width="20%"><img src="docs/images/web-mode.png" alt="Onglet Mode : le π-piquant en cours avec sa miniature, le rythme et le titre" width="180"><br><sub>Mode actif : miniature du π-piquant en cours, rythme</sub></td>
+    <td align="center" width="20%"><img src="docs/images/web-envoyer.png" alt="Onglet Envoyer : durée en pastilles, tirer un π-piquant" width="180"><br><sub>Envoyer une image ou un π-piquant</sub></td>
+    <td align="center" width="20%"><img src="docs/images/web-reglages.png" alt="Fenêtre des réglages de SlowMovie : film en cours, films, réglages" width="180"><br><sub>⚙ SlowMovie : film en cours, départ et fin, réglages</sub></td>
+    <td align="center" width="20%"><img src="docs/images/web-photos.png" alt="Fenêtre des réglages d'un mode inactif : réglages en attente d'activation" width="180"><br><sub>⚙ d'un mode inactif : réglages envoyés à l'activation</sub></td>
   </tr>
 </table>
 
