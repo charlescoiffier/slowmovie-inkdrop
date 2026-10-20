@@ -183,23 +183,30 @@ durée du film ; `0` l'efface. Avec « images au hasard », les images sont tir�
 **Page de confirmation** : après un envoi accepté, la page passe sur `/envoi/<identifiant>`, qui suit l'image
 (reçue, position, affichée) et peut être rechargée ou mise en favori.
 
-## Onglet π-piquant (dessin au hasard)
+## Modes de défilement (SlowMovie, π-piquants, photos)
 
-Un troisième onglet tire au hasard 1 à 200 décimales de π et un angle entier de 1° à 359°, demande le PNG (800 px) au
-service [pi-piquant](https://github.com/charlescoiffier/pi-piquant) et le met dans la file comme une image envoyée
-(même mot de passe d'envoi, mêmes limites). Les autres réglages du dessin gardent leurs valeurs de base, mais sans la légende
-du service : elle est écrite par le Pi comme texte de l'image (corps de 20 px), avec la marge réglable `caption_margin` (Réglages ou TUI,
-40 px par défaut) pour tenir compte d'un cadre qui masque le bas de l'écran. **Le Pi doit être mis à jour** pour cela.
+La passerelle propose trois modes, un seul actif à la fois : le film (SlowMovie), des π-piquants tirés au hasard, des photos
+d'un album Google Photos. Les envois ponctuels (image, π-piquant) fonctionnent dans les trois modes.
 
-1. Récupérer la clé de l'API, celle de `API_KEY` dans `~/srv/pi-piquant/api.env` sur le VPS.
-2. L'ajouter dans `~/srv/inkdrop/.env` : `SLOWMOVIE_RELAY_PIPIQUANT_API_KEY=<la clé>` (jamais dans git), puis :
+- **Mot de passe général** (celui des envois) : changer de mode, choisir le rythme parmi des valeurs prédéfinies
+  (π-piquant et photos : 5 min, 10 min, 30 min, 1 h, 3 h ; film : 30 s, 1, 2, 5 min) et afficher ou non le titre des π-piquants.
+- **Mot de passe administrateur** (bouton ⚙ de chaque mode) : tous les réglages du mode, dont le rythme libre (120 s à 24 h)
+  et, pour Photos, le **lien de partage de l'album** (`https://photos.app.goo.gl/…`). Le lien est un secret : il n'est ni
+  affiché, ni journalisé, ni renvoyé par le Pi ; la passerelle l'efface de son historique dès que le Pi a appliqué le réglage.
+- **π-piquants** : tirage de 1 à 200 décimales de π et d'un angle entier de 1° à 359°, image de 800 px demandée au service
+  [pi-piquant](https://github.com/charlescoiffier/pi-piquant) ; légende « π-piquant • 1 = 214° • 87 décimales » écrite par le
+  Pi (14 px, avec la marge basse `caption_margin`). Il faut la clé du service, voir plus bas.
+- **Photos** : la passerelle lit la page publique de l'album (méthode **non officielle** : elle peut cesser de fonctionner si
+  Google change sa page, et quiconque a le lien voit l'album), en garde la liste quelques heures et tire une photo au hasard,
+  réduite à la taille de l'écran. Si l'album est illisible, l'écran garde sa dernière image et la page l'indique.
 
-   ```bash
-   cd ~/srv/inkdrop && docker compose up -d --force-recreate
-   ```
-
-   Sans cette clé, l'onglet n'apparaît pas et la route répond 503.
-3. Essai : ouvrir l'onglet, choisir une durée, « Tirer un pi-piquant » ; la page de suivi rappelle les décimales et l'angle tirés.
+**Mise en place**
+1. Récupérer la clé de l'API π-piquant : celle de `API_KEY` dans `~/srv/pi-piquant/api.env` sur le VPS.
+2. L'ajouter dans `~/srv/inkdrop/.env` : `SLOWMOVIE_RELAY_PIPIQUANT_API_KEY=<la clé>` (jamais dans git), puis recréer le
+   conteneur : `cd ~/srv/inkdrop && docker compose up -d --force-recreate`. Sans cette clé, le mode π-piquant et l'envoi d'un
+   π-piquant sont indisponibles.
+3. **Mettre le Pi à jour** : les modes tournent sur le Pi (la passerelle seule ne suffit pas). Aucun nouveau secret : le lien
+   de l'album se saisit dans ⚙ Photos.
 
 ## 3. Mac
 
@@ -231,10 +238,17 @@ Variables facultatives : `SLOWMOVIE_HOST` (défaut `slomovpi.local`, nom d'hôte
 - [ ] Envoyer une photo avec un texte de 128 caractères accentués (« Été à Paris… ») : il est lisible, centré en bas, sur 3 lignes au plus, sans carrés à la place des accents.
 - [ ] Envoyer deux images depuis deux appareils : affichées dans l'ordre, le film reprend après la seconde.
 - [ ] 5 mauvais mots de passe, puis le bon : blocage avec message ; un `.svg` et un GIF animé sont refusés.
-- [ ] Onglet « Réglages » : mauvais mot de passe refusé, bon mot de passe accepté ; l'état du Pi s'affiche en moins de 40 s.
+- [ ] Bouton ⚙ Réglages d'un mode : mauvais mot de passe administrateur refusé, bon mot de passe accepté ; l'état du Pi s'affiche en moins de 40 s.
 - [ ] Changer de film depuis le téléphone : le Pi bascule en moins de 40 s, le statut passe à « appliqué ».
 - [ ] Régler un point de départ, puis « Aller à » un timecode : l'écran affiche l'image attendue.
 - [ ] Activer les sous-titres sur le film Kaguya (ou voir le message si ce sont des sous-titres image).
 - [ ] Un réglage interdit (par exemple `relay_url`, via `curl`) est refusé ; « Se déconnecter » redemande le mot de passe.
 - [ ] Après un envoi d'image, la page `/envoi/<identifiant>` suit l'image jusqu'à « affichée ».
 - [ ] Couper le relais 2 minutes : le film continue. Redémarrer le Pi pendant une image : elle reste jusqu'à l'échéance, sans boucle de redémarrage.
+- [ ] Onglet Mode (mot de passe général) : « Activer ce mode » sur π-piquant, l'écran passe à un dessin en moins de 40 s ; le rythme choisi (pastilles) est respecté.
+- [ ] La légende d'un π-piquant fait 14 px et reste au-dessus de la marquise ; décocher « Afficher le titre » : plus de texte. Ajuster `caption_margin` (⚙ SlowMovie) si le bas est encore masqué.
+- [ ] ⚙ Photos : coller le lien de l'album, « Enregistrer le lien » : l'écran affiche « lien configuré », jamais le lien ; activer le mode Photos, une photo de l'album s'affiche en noir et blanc.
+- [ ] Un lien d'album volontairement faux (autre site) est refusé ; un lien Google d'un album supprimé : l'écran garde sa dernière image et le mode indique « album illisible ».
+- [ ] Pendant chaque mode (π-piquant, photos), envoyer une image et un π-piquant ponctuels : ils s'affichent pour leur durée, puis le défilement reprend avec une nouvelle image.
+- [ ] Revenir au mode SlowMovie : le film reprend à sa progression enregistrée. Redémarrer le Pi : le mode actif est conservé.
+- [ ] Vérifier que le lien de l'album n'apparaît dans aucun journal (`docker compose logs`, `journalctl -u slowmovie`).

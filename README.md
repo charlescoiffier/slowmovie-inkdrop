@@ -3,20 +3,28 @@
 > Ce projet a été vibecodé avec l'aide de l'intelligence artificielle.
 
 Évolution de [SlowMovie](https://github.com/TomWhitwell/SlowMovie) (un film joué image par image sur un écran e-paper,
-Raspberry Pi) avec trois apports :
+Raspberry Pi) avec quatre apports :
 
-1. **Envoi d'images à distance** : depuis un téléphone ou un ordinateur, on envoie une image et une durée. Elle remplace
-   le film à l'écran pendant ce temps (le film est en pause), puis le film reprend là où il s'était arrêté. Les envois
-   forment une file d'attente, protégée par un mot de passe partagé.
-   Un **texte** de 128 caractères au plus peut accompagner l'image : il s'affiche en blanc cerclé de noir (corps de 20 px), centré en bas,
-   avec une marge réglable sous le texte (`caption_margin`, 40 px par défaut) pour un écran en partie masqué par un cadre.
-   Un onglet **π-piquant** tire au hasard un dessin d'après les décimales de π (1 à 200 décimales, angle de 1° à 359°),
-   produit par le service [pi-piquant](https://github.com/charlescoiffier/pi-piquant), et l'affiche pour la durée choisie ;
-   la légende (« π-piquant • 1 = 214° • 87 décimales ») est écrite par le Pi, et non dessinée par le service.
-   Un onglet **Réglages** (mot de passe administrateur séparé) permet de piloter le Pi à distance : film, position de
-   départ et de fin par film (pour sauter les génériques), sous-titres (y compris intégrés au film) et réglages.
-2. **Interface terminal** (TUI Textual, au clavier, thème « galaxy » comme [cadav](https://github.com/charlescoiffier/cadav)).
-3. **Ajout de films simplifié** : glisser-déposer dans un partage réseau, ou `slowmovie add film.mp4`.
+1. **Trois modes de défilement**, un seul actif à la fois, choisis depuis la passerelle :
+   - **SlowMovie** : le film, image après image, comme l'amont ;
+   - **π-piquants** : un dessin tiré au hasard d'après les décimales de π (1 à 200 décimales, angle de 1° à 359°),
+     produit par le service [pi-piquant](https://github.com/charlescoiffier/pi-piquant), renouvelé à intervalle régulier ;
+   - **Photos** : une photo tirée au hasard dans un album Google Photos (lien de partage, méthode non officielle),
+     renouvelée à intervalle régulier.
+
+   Le mot de passe général suffit pour changer de mode, de rythme (pastilles : 5 min à 3 h, ou 30 s à 5 min pour le film)
+   et pour afficher ou non le titre des π-piquants. Le bouton ⚙ de chaque mode ouvre ses réglages complets (mot de passe
+   administrateur séparé) : pour SlowMovie, le film, la position de départ et de fin par film (pour sauter les génériques),
+   les sous-titres (y compris intégrés) et les réglages du lecteur ; pour les π-piquants, le rythme libre et le titre ; pour
+   les photos, le lien de l'album (un secret : jamais affiché ni journalisé) et le rythme.
+2. **Envoi d'images à distance**, dans tous les modes : depuis un téléphone ou un ordinateur, on envoie une image et une
+   durée (ou on tire un π-piquant au hasard). Elle remplace le défilement à l'écran pendant ce temps, qui reprend ensuite.
+   Les envois forment une file d'attente, protégée par un mot de passe partagé. Un **texte** de 128 caractères au plus peut
+   accompagner l'image : il s'affiche en blanc cerclé de noir (corps de 20 px, 14 px pour la légende d'un π-piquant),
+   centré en bas, avec une marge réglable sous le texte (`caption_margin`, 40 px par défaut) pour un écran en partie
+   masqué par un cadre.
+3. **Interface terminal** (TUI Textual, au clavier, thème « galaxy » comme [cadav](https://github.com/charlescoiffier/cadav)).
+4. **Ajout de films simplifié** : glisser-déposer dans un partage réseau, ou `slowmovie add film.mp4`.
 
 ## Aperçu
 
@@ -26,10 +34,11 @@ Raspberry Pi) avec trois apports :
 
 <table>
   <tr>
-    <td align="center" width="25%"><img src="docs/images/web-envoi.png" alt="Formulaire d'envoi d'une image avec son texte" width="230"><br><sub>Envoyer une image, avec un texte et une durée</sub></td>
-    <td align="center" width="25%"><img src="docs/images/web-confirmation.png" alt="Page de confirmation d'envoi" width="230"><br><sub>Page de confirmation : position dans la file</sub></td>
-    <td align="center" width="25%"><img src="docs/images/web-reglages.png" alt="Onglet Réglages : état du Pi et films" width="230"><br><sub>Onglet Réglages : état du Pi, films, départ et fin</sub></td>
-    <td align="center" width="25%"><img src="docs/images/web-reglages-bas.png" alt="Onglet Réglages : réglages du lecteur" width="230"><br><sub>Les mêmes réglages que la TUI</sub></td>
+    <td align="center" width="20%"><img src="docs/images/web-mode.png" alt="Onglet Mode : le mode π-piquant, son rythme et son titre" width="180"><br><sub>Onglet Mode : activer un mode, choisir son rythme</sub></td>
+    <td align="center" width="20%"><img src="docs/images/web-envoyer.png" alt="Onglet Envoyer : tirer un π-piquant" width="180"><br><sub>Onglet Envoyer : une image ou un π-piquant</sub></td>
+    <td align="center" width="20%"><img src="docs/images/web-confirmation.png" alt="Page de confirmation d'envoi" width="180"><br><sub>Page de suivi, avec retour à l'accueil</sub></td>
+    <td align="center" width="20%"><img src="docs/images/web-reglages.png" alt="Réglages de SlowMovie : état du Pi et films" width="180"><br><sub>⚙ SlowMovie : état du Pi, films, départ et fin</sub></td>
+    <td align="center" width="20%"><img src="docs/images/web-photos.png" alt="Réglages du mode Photos : lien de l'album et rythme" width="180"><br><sub>⚙ Photos : lien de l'album (jamais affiché) et rythme</sub></td>
   </tr>
 </table>
 
@@ -44,15 +53,17 @@ Raspberry Pi) avec trois apports :
 
 ### Sur l'écran e-paper
 
-Une image envoyée avec son texte, centré en bas (rendu tramé en 1 bit, comme l'écran) :
+Une image envoyée avec son texte, centré en bas, et un π-piquant avec sa légende (rendu tramé en 1 bit, comme l'écran).
+La marge sous le texte tient compte d'un cadre qui masque le bas de l'écran :
 
-<img src="docs/images/ecran-texte.png" alt="Image envoyée avec un texte sous l'image, rendue en noir et blanc" width="480">
+<img src="docs/images/ecran-texte.png" alt="Image envoyée avec un texte sous l'image, rendue en noir et blanc" width="360">
+<img src="docs/images/ecran-pipiquant.png" alt="Un π-piquant avec sa légende, rendu en noir et blanc" width="360">
 
 ## Architecture
 
 ```
 téléphone ──HTTPS──▶ relais (VPS, Docker) ◀──HTTPS sortant── lecteur (Pi) ──▶ écran e-paper
-                       page d'envoi, file                      FILM ↔ IMAGE        ▲
+                       page d'envoi, file                      FILM / DIAPORAMA ↔ IMAGE ▲
                                                                   ▲                │
                                           TUI / CLI ──socket──────┘          seul à toucher l'écran
 ```
