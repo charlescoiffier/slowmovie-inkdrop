@@ -156,3 +156,11 @@ def test_the_modal_refresh_never_overwrites_what_is_being_typed(client):
     assert "refresh(true)" in scripts                                      # après une action
     body = scripts[scripts.index("function renderCurrentInModal"):scripts.index("function renderCurrentInModal") + 200]
     assert "refresh(false)" in body and "refresh(true)" not in body
+
+
+def test_the_current_card_reloads_when_the_relay_has_a_newer_slide(client):
+    html = client.get("/").text
+    scripts = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+    assert "state.slides" in scripts and "cached.at !== at" in scripts and "sentCard()" in scripts
+    assert "lastNext" not in scripts                      # plus de déduction à partir du compte à rebours
+    assert '"sent"' in scripts and 'displaying === "IMAGE"' in scripts

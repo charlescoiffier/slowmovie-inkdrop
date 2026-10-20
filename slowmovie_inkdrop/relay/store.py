@@ -257,6 +257,13 @@ class Store:
             tmp.write_bytes(data)
             os.replace(tmp, self.current_dir / f"{source}{suffix}")      # jamais de paire à moitié écrite
 
+    def current_at(self, source: str) -> float | None:
+        """Quand la dernière diapositive de cette source a été envoyée au Pi (la page s'en sert pour recharger sa carte)."""
+        try:
+            return float(json.loads((self.current_dir / f"{source}.json").read_text())["at"])
+        except (OSError, ValueError, KeyError):
+            return None
+
     def delete_current_slide(self, source: str) -> None:
         for suffix in (".jpg", ".json"):
             try:

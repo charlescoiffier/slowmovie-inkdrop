@@ -73,6 +73,7 @@ DRAFT_FIELDS = {
     "photos": {"photos_interval", "photos_album_url"},
 }
 THUMBNAIL_WIDTH = 320
+CURRENT_SOURCES = ("pipiquant", "photos", "sent")      # ce que le Pi a présenté : diaporamas, ou une image envoyée
 MODE_SOURCES = ("slowmovie", "pipiquant", "photos")
 PIPIQUANT_SIZE = 800      # grand côté en pixels : la largeur de l'écran
 
@@ -315,6 +316,14 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
         body = await read_json(request, 2048)
         return await run_in_threadpool(build_slide, body)
 
+    def keep_sent_image(image_id: str, item: dict) -> None:
+        """Une image envoyée vient d'être affichée par le Pi : sa miniature devient « ce que le Pi présente »."""
+        try:
+            thumbnail = make_thumbnail(store.image_path(image_id).read_bytes())
+            store.save_current_slide("sent", {"caption": item["caption"], "duration": item["duration"]}, thumbnail, clock())
+        except (OSError, ValueError):
+            log.warning("miniature de l'image envoyée non enregistrée")
+
     @app.get("/api/status/{image_id}")
     def status(image_id: str) -> dict:
         item = store.get(check_id(image_id))
@@ -343,8 +352,11 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
     def ack(image_id: str, body: Ack) -> dict:
         if body.status not in ("shown", "failed"):
             raise HTTPException(422, "Statut inconnu.")
-        if store.get(check_id(image_id)) is None:
+        item = store.get(check_id(image_id))
+        if item is None:
             raise HTTPException(404, "Envoi introuvable.")
+        if body.status == "shown":
+            keep_sent_image(image_id, item)                 # avant que l'image ne soit effacée avec son statut final
         store.set_status(image_id, body.status)
         return {"ok": True}
 
@@ -475,6 +487,7 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
             "next_in_seconds": next_in,
             "error": error[:200] if isinstance(error, str) else "",
             "film": film_info(state), "displaying": displaying(state), "drafts": public_drafts(),
+            "slides": {source: store.current_at(source) for source in CURRENT_SOURCES},
             "pipiquant_available": pipiquant_enabled,
             "pi_outdated": isinstance(state, dict) and "source" not in state,
             "presets": {"slowmovie": list(SLOWMOVIE_RHYTHMS), "slide": list(SLIDE_RHYTHMS)},
@@ -496,13 +509,13 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
         """Miniature et détails de la dernière diapositive envoyée au Pi (π-piquant ou photo)."""
         data = await general_request(request)
         source = data.get("source")
-        if source not in ("pipiquant", "photos"):
-            raise HTTPException(422, "Mode inconnu.")
+        if source not in CURRENT_SOURCES:
+            raise HTTPException(422, "Source inconnue.")
         current = store.current_slide(source)
         if current is None:
             raise HTTPException(404, "Aucune diapositive pour l'instant.")
         details, thumbnail, at = current
-        return {"source": source, "details": details, "age_seconds": max(0, int(clock() - at)),
+        return {"source": source, "details": details, "at": at, "age_seconds": max(0, int(clock() - at)),
                 "thumbnail": "data:image/jpeg;base64," + base64.b64encode(thumbnail).decode()}
 
     @app.post("/api/mode/set", status_code=202)

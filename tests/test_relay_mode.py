@@ -390,3 +390,53 @@ def test_the_kept_photo_disappears_once_a_new_album_link_is_applied(tmp_path):
     client.post(f"/api/device/commands/{command_id}/ack", json={"status": "applied"}, headers=DEVICE)
     assert call(client, "current", {"source": "photos"}).status_code == 404
     assert call(client, "current", {"source": "pipiquant"}).status_code == 200
+
+
+# -- la carte « en cours » suit ce que le Pi présente réellement ------------------------------
+
+def test_state_tells_when_each_current_slide_was_last_served(env):
+    from slowmovie_inkdrop.relay.store import Store
+    client, _, path = env
+    assert call(client, "state").json()["slides"] == {"pipiquant": None, "photos": None, "sent": None}
+    Store(path).save_current_slide("pipiquant", {"decimals": 1, "angle": 2}, b"\xff\xd8a", now=123.0)
+    assert call(client, "state").json()["slides"] == {"pipiquant": 123.0, "photos": None, "sent": None}
+    Store(path).save_current_slide("pipiquant", {"decimals": 3, "angle": 4}, b"\xff\xd8b", now=456.0)
+    assert call(client, "state").json()["slides"]["pipiquant"] == 456.0          # change à chaque nouvelle diapositive
+
+
+def test_current_slide_card_carries_its_timestamp(env):
+    from slowmovie_inkdrop.relay.store import Store
+    client, _, path = env
+    Store(path).save_current_slide("pipiquant", {"decimals": 87, "angle": 214}, b"\xff\xd8thumb", now=777.0)
+    assert call(client, "current", {"source": "pipiquant"}).json()["at"] == 777.0
+
+
+def test_an_image_sent_to_the_pi_becomes_the_current_display_once_shown(tmp_path):
+    import io
+
+    from PIL import Image
+    client, _, path = make(tmp_path)
+    buf = io.BytesIO()
+    Image.new("RGB", (800, 600), "green").save(buf, "PNG")
+    r = client.post("/api/send", data={"password": UPLOAD_PASSWORD, "duration": "300", "caption": "Joyeux anniversaire"},
+                    files={"image": ("p.png", buf.getvalue(), "image/png")})
+    image_id = r.json()["id"]
+    assert call(client, "current", {"source": "sent"}).status_code == 404                  # pas encore affichée
+    client.post(f"/api/device/ack/{image_id}", json={"status": "shown"}, headers=DEVICE)
+    body = call(client, "current", {"source": "sent"}).json()
+    assert body["source"] == "sent" and body["details"] == {"caption": "Joyeux anniversaire", "duration": 300}
+    assert body["thumbnail"].startswith("data:image/jpeg;base64,")
+    assert call(client, "state").json()["slides"]["sent"] == body["at"]
+
+
+def test_a_failed_image_never_becomes_the_current_display(tmp_path):
+    import io
+
+    from PIL import Image
+    client, _, path = make(tmp_path)
+    buf = io.BytesIO()
+    Image.new("RGB", (80, 60), "green").save(buf, "PNG")
+    image_id = client.post("/api/send", data={"password": UPLOAD_PASSWORD, "duration": "300"},
+                           files={"image": ("p.png", buf.getvalue(), "image/png")}).json()["id"]
+    client.post(f"/api/device/ack/{image_id}", json={"status": "failed"}, headers=DEVICE)
+    assert call(client, "current", {"source": "sent"}).status_code == 404
