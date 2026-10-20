@@ -188,7 +188,7 @@ durée du film ; `0` l'efface. Avec « images au hasard », les images sont tir�
 Un troisième onglet tire au hasard 1 à 200 décimales de π et un angle entier de 1° à 359°, demande le PNG (800 px) au
 service [pi-piquant](https://github.com/charlescoiffier/pi-piquant) et le met dans la file comme une image envoyée
 (même mot de passe d'envoi, mêmes limites). Les autres réglages du dessin gardent leurs valeurs de base, mais sans la légende
-du service : elle est écrite par le Pi comme texte de l'image, en gros, avec la marge réglable `caption_margin` (Réglages ou TUI,
+du service : elle est écrite par le Pi comme texte de l'image (corps de 20 px), avec la marge réglable `caption_margin` (Réglages ou TUI,
 40 px par défaut) pour tenir compte d'un cadre qui masque le bas de l'écran. **Le Pi doit être mis à jour** pour cela.
 
 1. Récupérer la clé de l'API, celle de `API_KEY` dans `~/srv/pi-piquant/api.env` sur le VPS.

@@ -141,7 +141,7 @@ def _drawable(text: str, font) -> str:
     return "".join(out)
 
 
-CAPTION_MAX_SIZE = 48      # corps de départ : lisible sur l'écran e-paper 7,5"
+CAPTION_MAX_SIZE = 20      # corps de départ (px) : discret sur l'écran e-paper 7,5"
 
 
 def draw_caption(img: Image.Image, text: str, *, margin: int = 12, bottom_margin: int = 40,

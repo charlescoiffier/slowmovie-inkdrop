@@ -37,7 +37,7 @@ def test_the_confirmation_page_follows_the_upload(client):
         r = client.get("/envoi/" + ident)
         assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
     html = client.get("/envoi/" + "a" * 32).text
-    for expected in ("/api/status/", "location.pathname", "Envoyer une autre image", "introuvable"):
+    for expected in ("/api/status/", "location.pathname", "Retour à l'accueil", "introuvable"):
         assert expected in html, expected
 
 
