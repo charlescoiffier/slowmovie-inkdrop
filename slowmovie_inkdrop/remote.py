@@ -3,16 +3,23 @@ from __future__ import annotations
 
 import math
 
+from .album_url import valid_album_url
+from .config import MODES, SLIDE_INTERVAL
+
 REMOTE_SETTINGS = (
     "delay", "increment", "random_file", "random_frames", "loop", "fullscreen", "subtitles", "timecode",
     "subtitle_track", "contrast", "min_image_seconds", "max_image_seconds", "queue_max",
     "queue_expiry_seconds", "caption_max_chars", "caption_margin", "active_hours", "relay_poll_seconds",
+    "mode", "pipiquant_interval", "photos_interval", "pipiquant_title", "photos_album_url",
 )
+SECRET_SETTINGS = ("photos_album_url",)      # modifiable à distance, mais jamais renvoyé dans l'instantané du Pi
 SETTING_TYPES: dict[str, type] = {
     "delay": int, "increment": int, "random_file": bool, "random_frames": bool, "loop": bool,
     "fullscreen": bool, "subtitles": bool, "timecode": bool, "subtitle_track": int, "contrast": float,
     "min_image_seconds": int, "max_image_seconds": int, "queue_max": int, "queue_expiry_seconds": int,
     "caption_max_chars": int, "caption_margin": int, "active_hours": str, "relay_poll_seconds": int,
+    "mode": str, "pipiquant_interval": int, "photos_interval": int, "pipiquant_title": bool,
+    "photos_album_url": str,
 }
 SIMPLE_COMMANDS = ("pause", "resume", "skip")
 FILM_COMMANDS = ("play", "seek", "set_start", "set_end", "reset")
@@ -37,8 +44,14 @@ def check_setting_value(name: str, value):
             raise ValueError(f"{name} : vrai ou faux attendu")
         return value
     if kind is str:
+        if name == "photos_album_url":
+            if not isinstance(value, str) or (value.strip() and not valid_album_url(value.strip())):
+                raise ValueError("photos_album_url : lien de partage Google Photos attendu")
+            return value.strip()
         if not isinstance(value, str) or len(value) > 50:
             raise ValueError(f"{name} : texte de 50 caractères au plus attendu")
+        if name == "mode" and value not in MODES:
+            raise ValueError("mode : slowmovie, pipiquant ou photos attendu")
         return value.strip()
     if kind is int:
         if isinstance(value, bool) or not isinstance(value, int) or abs(value) > MAX_INT:
@@ -50,6 +63,8 @@ def check_setting_value(name: str, value):
         number = float(value)
     if name == "relay_poll_seconds" and not POLL_RANGE[0] <= number <= POLL_RANGE[1]:
         raise ValueError("relay_poll_seconds : entre 5 et 300")
+    if name in ("pipiquant_interval", "photos_interval") and not SLIDE_INTERVAL[0] <= number <= SLIDE_INTERVAL[1]:
+        raise ValueError(f"{name} : entre {SLIDE_INTERVAL[0]} et {SLIDE_INTERVAL[1]} secondes")
     return number
 
 

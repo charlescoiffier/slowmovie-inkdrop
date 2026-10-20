@@ -116,3 +116,42 @@ def test_subtitle_track_out_of_range_is_refused(tmp_path, value):
 
 def test_subtitle_track_defaults_to_the_first_one():
     assert Settings().subtitle_track == 0
+
+
+def test_mode_settings_defaults():
+    s = Settings()
+    assert (s.mode, s.pipiquant_interval, s.photos_interval) == ("slowmovie", 600, 1800)
+    assert s.pipiquant_title is True and s.photos_album_url == ""
+
+
+@pytest.mark.parametrize("field,value", [
+    ("mode", "diaporama"), ("mode", ""),
+    ("pipiquant_interval", 119), ("pipiquant_interval", 86401),
+    ("photos_interval", 119), ("photos_interval", 86401),
+    ("photos_album_url", "https://example.com/x"), ("photos_album_url", "http://photos.google.com/x"),
+])
+def test_mode_settings_out_of_range_are_refused(tmp_path, field, value):
+    with pytest.raises(ConfigError):
+        Settings(**{field: value}).save(tmp_path / "x.conf")
+
+
+@pytest.mark.parametrize("field,value", [
+    ("mode", "pipiquant"), ("mode", "photos"), ("pipiquant_interval", 120), ("pipiquant_interval", 86400),
+    ("photos_interval", 120), ("photos_interval", 86400), ("photos_album_url", ""),
+])
+def test_mode_settings_bounds_are_inclusive(tmp_path, field, value):
+    Settings(**{field: value}).save(tmp_path / "x.conf")
+
+
+def test_album_link_with_a_key_survives_a_save_and_load(tmp_path):
+    link = "https://photos.google.com/share/AF1QipAbC?key=Q0pLeVV3ZHlo&x=1"
+    Settings(mode="photos", photos_album_url=link, pipiquant_title=False).save(tmp_path / "x.conf")
+    loaded = Settings.load(tmp_path / "x.conf")
+    assert (loaded.mode, loaded.photos_album_url, loaded.pipiquant_title) == ("photos", link, False)
+    assert (tmp_path / "x.conf").stat().st_mode & 0o777 == 0o600
+
+
+def test_an_invalid_mode_in_the_file_falls_back_to_the_default(tmp_path):
+    (tmp_path / "x.conf").write_text("mode = nimporte\nphotos-album-url = https://evil.com/x\n")
+    loaded = Settings.load(tmp_path / "x.conf")
+    assert loaded.mode == "slowmovie" and loaded.photos_album_url == ""

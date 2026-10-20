@@ -3,6 +3,8 @@ import pytest
 from slowmovie_inkdrop.remote import (
     COMMAND_KINDS,
     REMOTE_SETTINGS,
+    SECRET_SETTINGS,
+    SETTING_TYPES,
     check_setting_value,
     validate_command,
 )
@@ -80,3 +82,53 @@ def test_settings_command_is_normalised():
 def test_command_kinds_cover_the_spec():
     assert set(COMMAND_KINDS) == {"pause", "resume", "skip", "play", "seek", "set_start", "set_end", "reset",
                                   "settings"}
+
+
+ALBUM = "https://photos.google.com/share/AF1QipAbC?key=Q0pLeVV3"
+
+
+def test_mode_settings_are_remote_and_the_album_link_is_secret():
+    for name in ("mode", "pipiquant_interval", "photos_interval", "pipiquant_title", "photos_album_url"):
+        assert name in REMOTE_SETTINGS and name in SETTING_TYPES
+    assert SECRET_SETTINGS == ("photos_album_url",)
+
+
+@pytest.mark.parametrize("name, value, expected", [
+    ("mode", "slowmovie", "slowmovie"), ("mode", "pipiquant", "pipiquant"), ("mode", "photos", "photos"),
+    ("pipiquant_interval", 120, 120), ("photos_interval", 86400, 86400), ("pipiquant_title", False, False),
+    ("photos_album_url", ALBUM, ALBUM), ("photos_album_url", "", ""), ("photos_album_url", f" {ALBUM} ", ALBUM),
+])
+def test_valid_mode_setting_values(name, value, expected):
+    assert check_setting_value(name, value) == expected
+
+
+@pytest.mark.parametrize("name, value", [
+    ("mode", "autre"), ("mode", ""), ("mode", 1), ("mode", None), ("mode", "PHOTOS"),
+    ("pipiquant_interval", 119), ("pipiquant_interval", 86401), ("photos_interval", 0),
+    ("photos_interval", True), ("photos_interval", 600.5), ("photos_interval", "600"),
+    ("pipiquant_title", 1), ("pipiquant_title", "true"),
+    ("photos_album_url", "https://example.com/x"), ("photos_album_url", "http://photos.google.com/x"),
+    ("photos_album_url", ALBUM + "a" * 500), ("photos_album_url", 5), ("photos_album_url", None),
+])
+def test_invalid_mode_setting_values_are_refused(name, value):
+    with pytest.raises(ValueError):
+        check_setting_value(name, value)
+
+
+def test_other_text_settings_stay_limited_to_50_characters():
+    with pytest.raises(ValueError):
+        check_setting_value("active_hours", "x" * 51)
+
+
+def test_the_refusal_message_never_repeats_the_album_link():
+    bad = "https://evil.example/secret?key=zzz"
+    with pytest.raises(ValueError) as caught:
+        check_setting_value("photos_album_url", bad)
+    assert "secret?key" not in str(caught.value)
+
+
+def test_a_mode_change_is_a_valid_settings_command():
+    assert validate_command({"kind": "settings", "changes": {"mode": "photos"}}) == {
+        "kind": "settings", "changes": {"mode": "photos"}}
+    with pytest.raises(ValueError):
+        validate_command({"kind": "settings", "changes": {"mode": "photos", "photos_album_url": "https://x.io/a"}})

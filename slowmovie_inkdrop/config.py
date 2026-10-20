@@ -7,7 +7,12 @@ from dataclasses import dataclass, fields
 from datetime import datetime, time
 from pathlib import Path
 
+from .album_url import valid_album_url
+
 log = logging.getLogger(__name__)
+
+MODES = ("slowmovie", "pipiquant", "photos")
+SLIDE_INTERVAL = (120, 86400)      # bornes du rythme des diaporamas, en secondes
 
 
 class ConfigError(ValueError):
@@ -94,6 +99,12 @@ class Settings:
     caption_margin: int = 40         # px libres sous le texte (cadre de l'écran qui en masque le bas)
     caption_max_chars: int = 128     # texte sous l'image ; le Pi ne fait pas confiance au relais
     active_hours: str = ""    # "08:00-22:00" ; vide = toujours actif
+    # Modes de défilement
+    mode: str = "slowmovie"          # slowmovie | pipiquant | photos
+    pipiquant_interval: int = 600    # secondes entre deux π-piquants
+    photos_interval: int = 1800      # secondes entre deux photos
+    pipiquant_title: bool = True     # légende sous le π-piquant
+    photos_album_url: str = ""       # lien de partage de l'album : un secret, jamais journalisé
     # Relais
     relay_url: str = ""
     relay_token: str = ""
@@ -117,6 +128,12 @@ class Settings:
         check(self.queue_expiry_seconds >= 60, "queue_expiry_seconds", "doit être au moins 60")
         check(0 <= self.caption_margin <= 200, "caption_margin", "doit être entre 0 et 200")
         check(1 <= self.caption_max_chars <= 500, "caption_max_chars", "doit être entre 1 et 500")
+        check(self.mode in MODES, "mode", "doit être slowmovie, pipiquant ou photos")
+        for name in ("pipiquant_interval", "photos_interval"):
+            check(SLIDE_INTERVAL[0] <= getattr(self, name) <= SLIDE_INTERVAL[1], name,
+                  "doit être entre 120 et 86400")
+        check(self.photos_album_url == "" or valid_album_url(self.photos_album_url), "photos_album_url",
+              "doit être un lien de partage Google Photos")
         check(self.relay_poll_seconds >= 5, "relay_poll_seconds", "doit être au moins 5")
         check(self.loglevel.upper() in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"),
               "loglevel", "niveau inconnu")

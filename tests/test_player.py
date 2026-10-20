@@ -552,3 +552,16 @@ def test_snapshot_reports_the_end_point(make_player):
     ctx.player.starts.set_end("a.mp4", 50)
     film = ctx.player.remote_snapshot(ctx.clock())["films"][0]
     assert film["end_seconds"] == 50.0
+
+
+def test_remote_snapshot_never_contains_the_album_link(make_player):
+    link = "https://photos.google.com/share/AF1QipSecret?key=ZZZtop"
+    ctx = make_player(photos_album_url=link)
+    snap = ctx.player.remote_snapshot(ctx.clock())
+    assert "AF1QipSecret" not in json.dumps(snap) and "ZZZtop" not in json.dumps(snap)
+    assert "photos_album_url" not in snap["settings"]
+    assert snap["settings"]["photos_album_set"] is True
+    assert snap["settings"]["photos_album_host"] == "photos.google.com"
+    assert snap["settings"]["mode"] == "slowmovie"
+    plain = make_player(base=ctx.paths.base / "o").player.remote_snapshot(0)
+    assert plain["settings"]["photos_album_set"] is False and plain["settings"]["photos_album_host"] == ""

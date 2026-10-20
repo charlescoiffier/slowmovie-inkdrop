@@ -16,11 +16,12 @@ from typing import Protocol
 
 from PIL import Image
 
+from .album_url import album_host
 from .config import Paths, Settings, in_active_hours
 from .display import Display
 from .image_queue import ImageQueue, QueuedImage
 from .imaging import clean_caption, draw_caption, to_panel
-from .remote import REMOTE_SETTINGS, check_setting_value
+from .remote import REMOTE_SETTINGS, SECRET_SETTINGS, check_setting_value
 from .starts import StartPoints, seconds_to_frame
 from .videos import VideoInfo, has_progress, next_video, probe_video, read_progress, write_progress
 
@@ -392,7 +393,9 @@ class Player:
             "duration_seconds": info.duration if info else None,
             "error": self.error,
             "queue": [{"id": i.id, "duration": i.duration, "caption": i.caption} for i in self.queue.items()],
-            "settings": {name: getattr(s, name) for name in REMOTE_SETTINGS},
+            "settings": {**{name: getattr(s, name) for name in REMOTE_SETTINGS if name not in SECRET_SETTINGS},
+                         "photos_album_set": bool(s.photos_album_url),
+                         "photos_album_host": album_host(s.photos_album_url)},
             "films": films,
         }
 
