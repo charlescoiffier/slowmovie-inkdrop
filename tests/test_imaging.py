@@ -213,3 +213,10 @@ def test_draw_caption_respects_a_smaller_maximum_size():
     _, top14, _, bottom14 = _bbox_of_change(base, draw_caption(base, "Bonjour", max_size=14))
     assert (bottom14 - top14) < (bottom20 - top20) and bottom14 - top14 <= 22
     assert bottom14 <= 480 - 40
+
+
+@pytest.mark.parametrize("size", [0, 1, 10, 12, 13, 14, 15, 20, 48, 500])
+def test_draw_caption_never_crashes_whatever_the_requested_size(size):
+    base = Image.new("RGB", (800, 480), (120, 120, 120))
+    out = draw_caption(base, "Bonjour tout le monde", max_size=size)
+    assert out.size == (800, 480) and _bbox_of_change(base, out) is not None

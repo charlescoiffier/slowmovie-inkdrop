@@ -193,9 +193,9 @@ class Player:
             self.next_frame_at = self.clock() + SLIDE_RETRY_SECONDS
             self._write_state(self.clock())
             return
-        except Exception as exc:  # noqa: BLE001 - écran ou image : on garde l'affichage et on réessaie
+        except Exception:  # noqa: BLE001 - écran ou image : on garde l'affichage et on réessaie
             log.exception("échec d'affichage d'une diapositive")
-            self.error = f"Erreur d'affichage : {exc}"
+            self.error = "Erreur d'affichage d'une diapositive."      # le détail reste dans le journal du Pi
             self.next_frame_at = self.clock() + SLIDE_RETRY_SECONDS
             self._write_state(self.clock())
             return
@@ -350,9 +350,7 @@ class Player:
             self._load_video(target)
             self.next_frame_at = 0.0
         elif name == "reload":
-            self.settings = Settings.load(self.paths.conf)
-            self.queue.max_items = self.settings.queue_max
-            self.queue.expiry_seconds = self.settings.queue_expiry_seconds
+            self._adopt_settings(Settings.load(self.paths.conf))
         elif name in ("seek", "set_start", "set_end", "reset"):
             target = self._ready_video(cmd.get("video"))
             if target is None:
@@ -412,13 +410,17 @@ class Player:
         if problems:
             return {"ok": False, "error": f"{problems[0][0]} {problems[0][1]}"}
         new.save(self.paths.conf)
+        self._adopt_settings(new)
+        return {"ok": True}
+
+    def _adopt_settings(self, new: Settings) -> None:
+        """Adopte de nouveaux réglages (commande distante ou rechargement après la TUI)."""
         if new.mode != self.settings.mode:
             self.next_frame_at = 0.0            # le nouveau mode s'affiche au prochain tour
             self.error = ""
         self.settings = new
         self.queue.max_items = new.queue_max
         self.queue.expiry_seconds = new.queue_expiry_seconds
-        return {"ok": True}
 
     def remote_snapshot(self, now: float) -> dict:
         """Instantané envoyé au relais : ni jeton, ni adresse du relais."""

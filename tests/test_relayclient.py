@@ -349,7 +349,7 @@ import pytest  # noqa: E402
 
 
 @pytest.mark.parametrize("raw, expected", [
-    (14, 14), (10, 10), (20, 20), (9, 0), (21, 0), (0, 0), (-5, 0), (True, 0), ("14", 0), (14.0, 0), (None, 0),
+    (14, 14), (20, 20), (16, 16), (13, 0), (10, 0), (9, 0), (21, 0), (0, 0), (-5, 0), (True, 0), ("14", 0), (14.0, 0), (None, 0),
 ])
 def test_caption_size_from_the_relay_is_validated(tmp_path, raw, expected):
     item = {"id": A, "duration": 60, "caption": "x"}

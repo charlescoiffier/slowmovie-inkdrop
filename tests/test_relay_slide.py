@@ -161,3 +161,21 @@ def test_slides_do_not_use_the_queue_or_the_send_limit(tmp_path):
     for _ in range(25):
         assert slide(client, {"source": "pipiquant", "title": False}).status_code == 200
     assert client.get("/api/device/pending", headers=DEVICE).json() == []
+
+
+def test_an_unexpected_failure_while_reading_an_album_is_a_clean_502(tmp_path, caplog):
+    import logging as _logging
+    caplog.set_level(_logging.DEBUG)
+
+    class Exploding:
+        def photo(self, url):
+            raise RuntimeError(f"boom {url}")
+
+    world = World()
+    config = RelayConfig(data_dir=tmp_path, password_hash=hash_password(PASSWORD), device_token=TOKEN,
+                         pipiquant_api_url=BASE, pipiquant_api_key=KEY)
+    client = TestClient(create_app(config, clock=Clock(), http_client=httpx.Client(transport=httpx.MockTransport(world)),
+                                   album_photos=Exploding()))
+    r = slide(client, {"source": "photos", "album_url": LONG})
+    assert r.status_code == 502 and "illisible" in r.json()["detail"]
+    assert "SECRET" not in r.text and "SECRET" not in caplog.text and "boom" not in r.text

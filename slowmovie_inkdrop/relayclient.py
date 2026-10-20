@@ -22,6 +22,7 @@ log = logging.getLogger(__name__)
 
 MAX_PIXELS = 40_000_000          # le relais réencode à 2000 px max ; au-delà, on ne fait pas confiance
 MAX_DOWNLOAD = 15 * 1024 * 1024
+SLIDE_TIMEOUT = httpx.Timeout(15.0, read=80.0)   # la passerelle prépare l'image avant de répondre (service, album)
 FORGOTTEN = (404, 410, 422)      # le relais ne connaît plus cet envoi : l'accusé n'a plus d'objet
 
 
@@ -73,7 +74,8 @@ class RelayClient:
         """Demande une diapositive : (image, légende, corps de légende). Le corps JSON porte le lien d'album."""
         url = f"{self.base_url}/api/device/slide"
         try:
-            with self._client.stream("POST", url, json=body, headers=self._headers) as response:
+            with self._client.stream("POST", url, json=body, headers=self._headers,
+                                     timeout=SLIDE_TIMEOUT) as response:
                 if response.status_code >= 400:
                     response.read()
                     detail = ""

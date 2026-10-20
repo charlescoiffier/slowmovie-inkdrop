@@ -252,35 +252,55 @@ $("pi-form").addEventListener("submit", async (e) => {
 });
 
 /* ---- choix du mode et du rythme (mot de passe général) ---- */
+/* Le suivi automatique ne démarre qu'après un appel accepté par la passerelle et s'arrête au premier refus :
+   jamais de mot de passe renvoyé en boucle (cinq échecs bloquent l'adresse pendant 15 minutes). */
 let modeState = null;
 let modeTimer = null;
+let modeAuthed = false;
+let actionSeq = 0;
 async function modeCall(route, payload = {}, quiet = false) {
   const password = $("mode-password").value;
   if (!password) { if (!quiet) say("mode-msg", "Saisissez le mot de passe.", "err"); return null; }
   const r = await api("/api/mode/" + route, { method: "POST", body: JSON.stringify({ password, ...payload }) });
-  if (!r.ok) { if (!quiet) say("mode-msg", r.body.detail || "Erreur " + r.status, "err"); return null; }
+  if (!r.ok) {
+    if (r.status === 401 || r.status === 429) { modeAuthed = false; modeStop(); say("mode-msg", r.body.detail || "Erreur " + r.status, "err"); }
+    else if (!quiet) say("mode-msg", r.body.detail || "Erreur " + r.status, "err");
+    return null;
+  }
+  modeAuthed = true;
   rememberPassword(password);
   return r.body;
 }
 async function refreshMode(quiet = true) {
   const state = await modeCall("state", {}, quiet);
-  if (!state) { if (modeState !== null) { modeState = null; renderMode(); } return; }
+  if (!state) { if (modeState !== null) { modeState = null; renderMode(); } return false; }
   const changed = JSON.stringify(state) !== JSON.stringify(modeState);
   modeState = state;
   if (changed) renderMode();
   $("top-status").textContent = state.online ? "" : "Pi hors ligne";
+  return true;
 }
-function modeStart() { refreshMode(true); modeStop(); modeTimer = setInterval(() => { if (!document.hidden && !$("panel-mode").hidden) refreshMode(); }, 5000); }
-function modeStop() { if (modeTimer) clearInterval(modeTimer); modeTimer = null; }
-async function modeAction(route, payload, label, reached) {
+async function modeStart() {
+  modeStop();
+  if (!$("mode-password").value) return;
+  if (!(await refreshMode(true)) || $("panel-mode").hidden) return;
+  modeTimer = setInterval(() => { if (!document.hidden && !$("panel-mode").hidden && modeAuthed) refreshMode(); }, 5000);
+}
+function modeStop() { actionSeq++; if (modeTimer) clearInterval(modeTimer); modeTimer = null; }
+async function modeAction(route, payload, label) {
+  const seq = ++actionSeq;
   say("mode-msg", `${label} : envoi…`);
   const sent = await modeCall(route, payload);
   if (!sent) return;
   say("mode-msg", `${label} : en attente du Pi…`);
   for (let i = 0; i < 20; i++) {
     await new Promise((res) => setTimeout(res, 3000));
-    const state = await modeCall("state", {}, true);
-    if (state) { modeState = state; renderMode(); if (reached(state)) return say("mode-msg", `${label} : appliqué.`, "ok"); }
+    if (seq !== actionSeq) return;                       // on a quitté l'onglet ou lancé une autre action
+    const result = await modeCall("command", { id: sent.id }, true);
+    if (!result) { if (!modeAuthed) return; continue; }
+    if (result.status === "applied") { await refreshMode(true); return say("mode-msg", `${label} : appliqué.`, "ok"); }
+    if (result.status === "failed") { await refreshMode(true); return say("mode-msg", `${label} : refusé par le Pi — ${result.message || "échec"}`, "err"); }
+    if (result.status === "expired") return say("mode-msg", `${label} : le Pi n'a pas répondu à temps.`, "err");
   }
   say("mode-msg", `${label} : le Pi n'a pas répondu.`, "err");
 }
@@ -288,7 +308,8 @@ function renderMode() {
   const s = modeState;
   for (const source of Object.keys(SOURCES)) {
     const active = !!s && s.source === source;
-    const unavailable = source === "pipiquant" ? (s && !s.pipiquant_available) : source === "photos" ? (s && !s.album_set) : false;
+    const outdated = !!s && s.pi_outdated;
+    const unavailable = outdated || (source === "pipiquant" ? (s && !s.pipiquant_available) : source === "photos" ? (s && !s.album_set) : false);
     const presets = s ? (source === "slowmovie" ? s.presets.slowmovie : s.presets.slide) : [];
     const current = s ? s.rhythms[source] : null;
     const children = [];
@@ -297,30 +318,39 @@ function renderMode() {
       el("span", { className: "dot" + (active ? " on" : "") }),
       el("div", { className: "grow", text: s ? (active ? "Actif" + next : "Inactif") : "Saisissez le mot de passe pour voir l'état." })));
     if (active && s.error) children.push(el("div", { className: "err", text: s.error }));
-    if (unavailable) children.push(el("div", { className: "hint", text: source === "pipiquant" ? "Le service π-piquant n'est pas configuré sur la passerelle." : "Aucun album : ajoutez son lien dans ⚙ Réglages." }));
+    if (outdated) children.push(el("div", { className: "err", text: "Le Pi doit être mis à jour pour utiliser les modes." }));
+    else if (unavailable) children.push(el("div", { className: "hint", text: source === "pipiquant" ? "Le service π-piquant n'est pas configuré sur la passerelle." : "Aucun album : ajoutez son lien dans ⚙ Réglages." }));
     children.push(el("h2", { text: "Rythme" }));
     const pills = el("div", { className: "pills" });
     for (const seconds of presets) {
       pills.append(el("button", { type: "button", className: "pill", "data-seconds": String(seconds), "aria-pressed": current === seconds ? "true" : "false",
-        onclick: () => modeAction("rhythm", { source, seconds }, `Rythme ${SOURCES[source]} ${duration(seconds)}`, (st) => st.rhythms[source] === seconds), text: duration(seconds) }));
+        onclick: () => modeAction("rhythm", { source, seconds }, `Rythme ${SOURCES[source]} ${duration(seconds)}`), text: duration(seconds) }));
     }
     if (current !== null && !presets.includes(current)) pills.append(el("span", { className: "hint", text: `actuel : ${duration(current)}` }));
     children.push(pills);
     if (source === "pipiquant") {
       const box = el("input", { type: "checkbox", id: "mode-title" });
       box.checked = !!(s && s.title);
-      box.addEventListener("change", () => modeAction("title", { title: box.checked }, "Titre", (st) => st.title === box.checked));
+      box.addEventListener("change", () => modeAction("title", { title: box.checked }, "Titre"));
       children.push(el("label", { className: "check" }, box, el("span", { text: "Afficher le titre sous le dessin" })));
     }
     children.push(el("div", { className: "actions" },
       el("button", { type: "button", className: "primary", id: "activate-" + source, disabled: active || unavailable,
-        onclick: () => modeAction("set", { source }, `Mode ${SOURCES[source]}`, (st) => st.source === source), text: active ? "Mode actif" : "Activer ce mode" }),
+        onclick: () => modeAction("set", { source }, `Mode ${SOURCES[source]}`), text: active ? "Mode actif" : "Activer ce mode" }),
       el("button", { type: "button", className: "plain", id: "gear-" + source, hidden: !adminEnabled, onclick: () => openAdmin(source), text: "⚙ Réglages" })));
     $("sp-" + source).replaceChildren(...children);
   }
 }
-$("mode-password").addEventListener("keydown", (e) => { if (e.key === "Enter") refreshMode(false); });
-$("mode-password").addEventListener("change", () => refreshMode(false));
+$("mode-password").addEventListener("input", () => { modeAuthed = false; lastTried = null; modeStop(); });
+let lastTried = null;       // Entrée puis la sortie du champ ne doivent pas compter deux essais
+async function validatePassword() {
+  const value = $("mode-password").value;
+  if (value === lastTried) return;
+  lastTried = value; modeStop();
+  if (await refreshMode(false)) modeStart();
+}
+$("mode-password").addEventListener("keydown", (e) => { if (e.key === "Enter") validatePassword(); });
+$("mode-password").addEventListener("change", validatePassword);
 renderMode();
 
 /* ---- réglages d'un mode (mot de passe administrateur) ---- */

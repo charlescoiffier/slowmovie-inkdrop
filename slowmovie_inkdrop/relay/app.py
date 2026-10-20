@@ -258,6 +258,9 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
                 data = albums.photo(url)
             except PhotosError as exc:
                 raise HTTPException(502, exc.message) from None
+            except Exception as exc:  # noqa: BLE001 - jamais de trace (elle pourrait contenir le lien)
+                log.error("album : erreur inattendue %s", type(exc).__name__)
+                raise HTTPException(502, "Album illisible : la page de l'album n'a pas pu être lue.") from None
         else:
             raise HTTPException(422, "Source inconnue.")
         try:
@@ -340,7 +343,8 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
         if not isinstance(data, dict):
             raise HTTPException(422, "Objet JSON attendu.")
         password = data.get("password")
-        if not isinstance(password, str) or not verify_password(password, config.password_hash):
+        if not isinstance(password, str) or not await run_in_threadpool(verify_password, password,
+                                                                         config.password_hash):
             mode_limiter.fail(ip)
             log.warning("mot de passe refusé depuis %s", ip)
             raise HTTPException(401, "Mot de passe incorrect.")
@@ -382,8 +386,20 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
             "next_in_seconds": next_in,
             "error": error[:200] if isinstance(error, str) else "",
             "pipiquant_available": pipiquant_enabled,
+            "pi_outdated": isinstance(state, dict) and "source" not in state,
             "presets": {"slowmovie": list(SLOWMOVIE_RHYTHMS), "slide": list(SLIDE_RHYTHMS)},
         }
+
+    @app.post("/api/mode/command")
+    async def mode_command(request: Request) -> dict:
+        """Résultat d'une commande créée depuis l'onglet Mode (accusé du Pi) : appliquée, refusée ou expirée."""
+        data = await general_request(request)
+        command_id = data.get("id")
+        store.expire_commands(clock(), config.command_ttl_seconds)
+        found = store.get_command(command_id) if isinstance(command_id, str) and _ID.fullmatch(command_id) else None
+        if found is None:
+            raise HTTPException(404, "Commande introuvable.")
+        return {"status": found["status"], "message": found["message"][:300]}
 
     @app.post("/api/mode/set", status_code=202)
     async def mode_set(request: Request) -> JSONResponse:
@@ -432,7 +448,7 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
         password = data.get("password") if isinstance(data, dict) else None
         if not isinstance(password, str):
             password = ""
-        if not verify_password(password, config.admin_password_hash):
+        if not await run_in_threadpool(verify_password, password, config.admin_password_hash):
             admin_limiter.fail(ip)
             log.warning("connexion administrateur refusée depuis %s", ip)
             raise HTTPException(401, "Mot de passe administrateur incorrect.")

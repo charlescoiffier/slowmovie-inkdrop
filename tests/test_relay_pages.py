@@ -95,3 +95,11 @@ def test_film_states_are_shown_in_french_not_as_raw_codes(client):
     html = client.get("/").text
     for expected in ('ready: "prêt"', 'pending: "copie en cours…"', 'error: "illisible"'):
         assert expected in html, expected
+
+
+def test_the_mode_polling_stops_at_the_first_refusal(client):
+    html = client.get("/").text
+    scripts = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+    for expected in ("modeAuthed", "r.status === 401 || r.status === 429", "modeStop()", "lastTried", '"command"',
+                     "pi_outdated", "actionSeq"):
+        assert expected in scripts, expected

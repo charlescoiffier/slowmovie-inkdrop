@@ -100,7 +100,7 @@ def test_a_photos_slide_sends_the_album():
     assert slide.caption == "" and slide.caption_size == 0
 
 
-@pytest.mark.parametrize("raw, expected", [("14", 14), ("9", 0), ("21", 0), ("abc", 0), ("", 0), ("-3", 0)])
+@pytest.mark.parametrize("raw, expected", [("14", 14), ("20", 20), ("13", 0), ("9", 0), ("21", 0), ("abc", 0), ("", 0), ("-3", 0)])
 def test_the_caption_size_is_validated(raw, expected):
     relay = Relay()
     relay.headers["x-slide-caption-size"] = raw
@@ -158,3 +158,10 @@ def test_the_client_is_reused_while_the_relay_settings_do_not_change():
     src.fetch("pipiquant", SETTINGS)
     src.fetch("pipiquant", Settings(relay_url="https://autre.test", relay_token="jeton"))
     assert made == [("https://relais.test", "jeton"), ("https://autre.test", "jeton")]
+
+
+def test_the_slide_request_waits_longer_than_the_relay_worst_case():
+    relay = Relay()
+    client(relay).slide({"source": "pipiquant", "title": True})
+    timeout = relay.requests[0].extensions["timeout"]
+    assert timeout["read"] >= 60 and timeout["connect"] <= 20

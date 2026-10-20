@@ -81,7 +81,7 @@ Pas de nouveau secret : le lien d'album est un réglage, pas une variable d'envi
 - Traitement du lien d'album comme un secret partout (§ 5).
 - Lectures d'état et actions de mode : limiteur propre, hors des 20 envois par heure.
 - Corps de la légende : chaque diapositive ou image envoyée porte son propre corps (14 px pour un π-piquant, 20 px sinon) ; le Pi n'a pas à deviner.
-- Pause et « passer » pendant un diaporama : la pause suspend le compte à rebours, « passer » tire tout de suite la diapositive suivante.
+- Pause et « passer » pendant un diaporama : la pause suspend l'affichage ; « reprendre » et « passer » tirent tout de suite une nouvelle diapositive (écart assumé : le compte à rebours n'est pas conservé pendant la pause).
 - Compatibilité : une nouvelle passerelle avec un Pi pas encore mis à jour ne doit rien casser (le Pi ignore ce qu'il ne connaît pas et la page indique que le Pi doit être mis à jour).
 - Les fichiers d'essai de l'album sont des **données synthétiques** qui imitent la structure de la page ; une copie de la vraie page n'est jamais commitée (elle contient les adresses des photos).
 

@@ -667,7 +667,7 @@ def test_a_display_failure_is_reported_without_crashing(make_player):
         raise OSError("écran débranché")
     ctx.display.display = broken
     ctx.player.tick()
-    assert "écran débranché" in ctx.player.error
+    assert ctx.player.error.startswith("Erreur d'affichage")
 
 
 def test_without_a_slide_source_the_slideshow_is_reported_unavailable(make_player):
@@ -751,3 +751,29 @@ def test_the_state_files_name_the_source(make_player):
     remote = ctx.player.remote_snapshot(ctx.clock())
     assert remote["source"] == "photos" and remote["next_at"] == ctx.player.next_frame_at
     assert json.loads(ctx.paths.state.read_text())["source"] == "photos"
+
+
+def test_a_mode_change_made_in_the_tui_and_reloaded_takes_effect_at_once(make_player):
+    ctx = make_player(mode="pipiquant", pipiquant_interval=10800)
+    ctx.player.tick()
+    assert ctx.player.next_frame_at == ctx.clock() + 10800
+    Settings(mode="slowmovie", pipiquant_interval=10800).save(ctx.paths.conf)          # ce que fait la TUI
+    ctx.player.submit({"cmd": "reload"})
+    ctx.clock.advance(5)
+    ctx.player.tick()
+    assert ctx.frames.calls and ctx.player.settings.mode == "slowmovie"
+    Settings(mode="photos", photos_interval=1800, photos_album_url=ALBUM).save(ctx.paths.conf)
+    ctx.player.submit({"cmd": "reload"})
+    ctx.clock.advance(5)
+    ctx.player.tick()
+    assert ctx.slides.calls[-1] == "photos"
+
+
+def test_the_slide_display_error_text_never_carries_the_exception_detail(make_player):
+    ctx = make_player(mode="pipiquant")
+
+    def broken(image):
+        raise OSError("/home/admin/secret/chemin : écran débranché")
+    ctx.display.display = broken
+    ctx.player.tick()
+    assert ctx.player.error == "Erreur d'affichage d'une diapositive." and "admin" not in ctx.player.error

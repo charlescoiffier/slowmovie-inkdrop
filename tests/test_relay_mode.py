@@ -227,3 +227,35 @@ def test_the_link_is_also_wiped_from_expired_and_failed_commands(tmp_path):
     clock.t += 700                                                          # au-delà des 10 minutes
     client.get("/api/device/commands", headers=DEVICE)
     assert not any("SECRET" in p for p in stored_payloads(path))
+
+
+def test_state_flags_a_pi_that_is_not_updated(tmp_path):
+    client, _, _ = make(tmp_path)
+    old = {k: v for k, v in STATE.items() if k != "source"}
+    client.put("/api/device/state", content=json.dumps(old), headers=DEVICE)
+    assert call(client, "state").json()["pi_outdated"] is True
+    client.put("/api/device/state", content=json.dumps(STATE), headers=DEVICE)
+    assert call(client, "state").json()["pi_outdated"] is False
+    fresh, _, _ = make(tmp_path / "b")
+    assert call(fresh, "state").json()["pi_outdated"] is False          # aucun état reçu : pas de reproche
+
+
+def test_the_general_password_can_read_the_result_of_its_own_command(env):
+    client, _, _ = env
+    command_id = call(client, "set", {"source": "slowmovie"}).json()["id"]
+    assert call(client, "command", {"id": command_id}).json() == {"status": "pending", "message": ""}
+    client.post(f"/api/device/commands/{command_id}/ack", json={"status": "failed", "message": "réglage inconnu"},
+                headers=DEVICE)
+    assert call(client, "command", {"id": command_id}).json() == {"status": "failed", "message": "réglage inconnu"}
+    assert call(client, "command", {"id": "0" * 32}).status_code == 404
+    assert call(client, "command", {"id": "nimporte"}).status_code == 404
+    assert call(client, "command", {"id": command_id}, password="faux").status_code == 401
+
+
+def test_deleted_command_payloads_are_not_left_in_the_database_file(tmp_path):
+    client, _, path = admin_client(tmp_path)
+    command_id = client.post("/api/admin/commands", json={"kind": "settings", "changes": {"photos_album_url": ALBUM}},
+                             headers=XRW).json()["id"]
+    client.post(f"/api/device/commands/{command_id}/ack", json={"status": "applied"}, headers=DEVICE)
+    raw = b"".join(p.read_bytes() for p in path.glob("relay.db*"))
+    assert b"AF1QipSECRET" not in raw

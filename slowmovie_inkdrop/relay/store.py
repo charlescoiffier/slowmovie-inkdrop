@@ -18,6 +18,7 @@ class Store:
         self._db.row_factory = sqlite3.Row
         self._lock = threading.Lock()
         with self._lock:
+            self._db.execute("PRAGMA secure_delete = ON")     # les lignes effacées (liens d'album) ne traînent pas dans le fichier
             self._db.execute("CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, "
                              "status TEXT NOT NULL, duration INTEGER NOT NULL, created_at REAL NOT NULL, "
                              "fetched_at REAL, caption TEXT NOT NULL DEFAULT '')")

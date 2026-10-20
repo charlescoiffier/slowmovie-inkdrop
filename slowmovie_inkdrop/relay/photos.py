@@ -109,7 +109,10 @@ class AlbumPhotos:
         raise PhotosError(UNREADABLE)
 
     def _download(self, url: str) -> bytes:
-        parts = httpx.URL(url)
+        try:
+            parts = httpx.URL(url)
+        except (httpx.InvalidURL, ValueError):
+            raise PhotosError(UNREADABLE) from None
         if parts.scheme != "https" or not IMAGE_HOST.fullmatch(parts.host or ""):
             raise PhotosError(UNREADABLE)
         try:
