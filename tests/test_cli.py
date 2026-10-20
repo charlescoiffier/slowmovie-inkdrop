@@ -101,3 +101,11 @@ def test_interrupted_copy_never_leaves_a_partial_file_under_the_final_name():
     cmd = cli.build_rsync_command(Path("/tmp/f.mkv"), "slomovpi.local", "admin", "/home/admin/SlowMovie")
     assert "--partial-dir=.rsync-partial" in cmd
     assert "--partial" not in cmd
+
+
+def test_format_status_names_the_slideshow_sources():
+    base = {"mode": "FILM", "queue": [], "updated_at": 0}
+    assert "π-piquants" in cli.format_status({**base, "source": "pipiquant"})
+    assert "photos" in cli.format_status({**base, "source": "photos"})
+    assert "Lecture du film" in cli.format_status({**base, "source": "slowmovie"})
+    assert "Lecture du film" in cli.format_status(base)                  # ancien fichier d'état sans « source »

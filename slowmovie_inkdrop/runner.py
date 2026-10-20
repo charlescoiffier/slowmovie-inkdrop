@@ -15,6 +15,7 @@ from .image_queue import ImageQueue
 from .library import Library
 from .player import Player
 from .relayclient import AckOutbox, CommandLog, relay_loop
+from .slides import RelaySlideSource
 from .videos import probe_video
 
 log = logging.getLogger("slowmovie")
@@ -50,7 +51,7 @@ def run(base: Path) -> int:
     outbox = AckOutbox(paths.acks)
     command_log = CommandLog(paths.commands)
     player = Player(paths=paths, settings=settings, display=display, frames=FfmpegFrameSource(cache_dir=paths.base / "subtitles"),
-                    image_queue=queue, library=library,
+                    image_queue=queue, library=library, slides=RelaySlideSource(),
                     on_done=lambda item, status: outbox.add(item.id, status))
     stop = threading.Event()
 

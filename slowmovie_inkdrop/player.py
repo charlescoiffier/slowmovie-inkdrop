@@ -22,6 +22,7 @@ from .display import Display
 from .image_queue import ImageQueue, QueuedImage
 from .imaging import CAPTION_MAX_SIZE, clean_caption, draw_caption, to_panel
 from .remote import REMOTE_SETTINGS, SECRET_SETTINGS, check_setting_value
+from .slides import SlideError, SlideSource
 from .starts import StartPoints, seconds_to_frame
 from .videos import VideoInfo, has_progress, next_video, probe_video, read_progress, write_progress
 
@@ -30,6 +31,7 @@ log = logging.getLogger(__name__)
 TICK_MAX = 5.0      # on se réveille au moins toutes les 5 s (commandes, file, état)
 IDLE_TICK = 30.0    # sans film ou hors plage horaire
 RETRY_SECONDS = 10.0
+SLIDE_RETRY_SECONDS = 60.0     # nouvel essai d'une diapositive en échec : jamais de boucle serrée
 
 
 class FrameSource(Protocol):
@@ -46,9 +48,10 @@ class Player:
                  image_queue: ImageQueue, library, clock: Callable[[], float] = time.time,
                  rng: random.Random | None = None, probe=probe_video,
                  on_done: Callable[[QueuedImage, str], None] | None = None,
-                 starts: StartPoints | None = None):
+                 starts: StartPoints | None = None, slides: SlideSource | None = None):
         self.paths, self.settings, self.display = paths, settings, display
         self.frames, self.queue, self.library = frames, image_queue, library
+        self.slides = slides
         self.clock, self.rng, self.probe, self.on_done = clock, rng or random.Random(), probe, on_done
         self.mode = "FILM"
         self.paused = False
@@ -114,9 +117,15 @@ class Player:
         if item is not None:
             self._show_image(item)
             return min(max(self.image_until - self.clock(), 0.0), TICK_MAX)
+        slideshow = self.settings.mode != "slowmovie"
+        if slideshow and self.next_frame_at - now > self._interval():
+            self.next_frame_at = 0.0            # l'heure a sauté : ne pas figer l'écran
         if now < self.next_frame_at:
             self._write_state(now)
             return min(self.next_frame_at - now, TICK_MAX)
+        if slideshow:
+            self._step_slide(now)
+            return min(max(self.next_frame_at - self.clock(), 0.0), TICK_MAX)
         self._step_film(now)
         return min(max(self.next_frame_at - self.clock(), 0.0), TICK_MAX)
 
@@ -157,6 +166,42 @@ class Player:
                 self.on_done(item, status)
             except Exception:
                 log.exception("on_done a échoué")
+
+    # -- diaporamas (π-piquants, photos) ----------------------------------
+    def _interval(self) -> float:
+        s = self.settings
+        return float(s.pipiquant_interval if s.mode == "pipiquant" else s.photos_interval)
+
+    def _step_slide(self, now: float) -> None:
+        s = self.settings
+        if self.slides is None:
+            self.error = "Diaporama indisponible."
+            self.next_frame_at = now + SLIDE_RETRY_SECONDS
+            self._write_state(now)
+            return
+        start = self.clock()
+        try:
+            slide = self.slides.fetch(s.mode, s)
+            panel = to_panel(slide.image, (self.display.width, self.display.height), contrast=s.contrast)
+            panel = draw_caption(panel, slide.caption, bottom_margin=s.caption_margin,
+                                 max_size=slide.caption_size or CAPTION_MAX_SIZE)
+            self.display.prepare()
+            self.display.display(panel)
+            self.display.sleep()
+        except SlideError as exc:
+            self.error = str(exc)
+            self.next_frame_at = self.clock() + SLIDE_RETRY_SECONDS
+            self._write_state(self.clock())
+            return
+        except Exception as exc:  # noqa: BLE001 - écran ou image : on garde l'affichage et on réessaie
+            log.exception("échec d'affichage d'une diapositive")
+            self.error = f"Erreur d'affichage : {exc}"
+            self.next_frame_at = self.clock() + SLIDE_RETRY_SECONDS
+            self._write_state(self.clock())
+            return
+        self.error = ""
+        self.next_frame_at = start + self._interval()
+        self._write_state(self.clock())
 
     # -- film ------------------------------------------------------------
     def _pick_video(self, videos: list[Path]) -> Path:
@@ -367,6 +412,9 @@ class Player:
         if problems:
             return {"ok": False, "error": f"{problems[0][0]} {problems[0][1]}"}
         new.save(self.paths.conf)
+        if new.mode != self.settings.mode:
+            self.next_frame_at = 0.0            # le nouveau mode s'affiche au prochain tour
+            self.error = ""
         self.settings = new
         self.queue.max_items = new.queue_max
         self.queue.expiry_seconds = new.queue_expiry_seconds
@@ -388,7 +436,8 @@ class Player:
                 "subtitle_codecs": row.get("subtitle_codecs", []),
             })
         return {
-            "sent_at": now, "mode": self.mode, "paused": self.paused,
+            "sent_at": now, "mode": self.mode, "source": s.mode, "next_at": self.next_frame_at,
+            "paused": self.paused,
             "video": self.video.name if self.video else None,
             "position_seconds": round(self.frame / info.fps, 1) if info else 0.0,
             "duration_seconds": info.duration if info else None,
@@ -409,7 +458,7 @@ class Player:
             if not s.random_frames:
                 remaining = int(max(info.frame_count - self.frame, 0) / s.increment * s.delay)
         return {
-            "mode": self.mode, "paused": self.paused,
+            "mode": self.mode, "source": s.mode, "paused": self.paused,
             "video": self.video.name if self.video else None,
             "frame": self.frame, "frame_count": info.frame_count if info else None,
             "percent": percent, "remaining_seconds": remaining,

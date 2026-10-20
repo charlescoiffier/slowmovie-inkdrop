@@ -53,6 +53,10 @@ def format_status(state: dict | None) -> str:
     elif state.get("mode") == "IMAGE":
         left = max(int(state.get("image_until", 0) - state.get("updated_at", 0)), 0)
         lines.append(f"🖼  Image envoyée à l'écran (encore {_hours(left)})")
+    elif state.get("source") == "pipiquant":
+        lines.append("🎨  Diaporama de π-piquants")
+    elif state.get("source") == "photos":
+        lines.append("🖼  Diaporama de photos")
     else:
         lines.append("🎞  Lecture du film")
     if state.get("video"):

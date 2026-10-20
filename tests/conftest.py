@@ -37,6 +37,24 @@ class FakeFrames:
         return Image.new("RGB", size, (frame % 256, 0, 0))
 
 
+class FakeSlides:
+    """Source de diapositives simulée : garde la trace des demandes, peut échouer."""
+
+    def __init__(self):
+        self.calls: list[str] = []
+        self.fail_with: Exception | None = None
+        self.caption = ""
+        self.caption_size = 0
+
+    def fetch(self, kind, settings):
+        from slowmovie_inkdrop.slides import Slide
+        self.calls.append(kind)
+        if self.fail_with:
+            raise self.fail_with
+        return Slide(Image.new("RGB", (400, 300), (30 * len(self.calls) % 256, 80, 160)), self.caption,
+                     self.caption_size)
+
+
 class FakeLibrary:
     def __init__(self, videos):
         self.videos = list(videos)
@@ -57,7 +75,7 @@ def png_bytes(size=(60, 40), color="blue") -> bytes:
 
 @pytest.fixture
 def make_player(tmp_path):
-    def _make(*, videos=("a.mp4",), clock=None, base=None, **settings_kw):
+    def _make(*, videos=("a.mp4",), clock=None, base=None, slides=True, **settings_kw):
         base = Path(base or tmp_path)
         settings = Settings(**settings_kw)
         paths = Paths(base)
@@ -65,12 +83,13 @@ def make_player(tmp_path):
         clock = clock or FakeClock()
         display = FileDisplay(base / "display")
         frames = FakeFrames()
+        fake_slides = FakeSlides() if slides is True else slides
         queue = ImageQueue(paths.queue_dir, settings.queue_max, settings.queue_expiry_seconds)
         library = FakeLibrary([paths.videos_dir(settings) / v for v in videos])
         done: list[tuple[str, str]] = []
         player = Player(paths=paths, settings=settings, display=display, frames=frames,
-                        image_queue=queue, library=library, clock=clock,
+                        image_queue=queue, library=library, clock=clock, slides=fake_slides,
                         probe=lambda p: INFO, on_done=lambda item, status: done.append((item.id, status)))
         return SimpleNamespace(player=player, clock=clock, display=display, frames=frames,
-                               queue=queue, paths=paths, library=library, done=done)
+                               queue=queue, paths=paths, library=library, done=done, slides=fake_slides)
     return _make

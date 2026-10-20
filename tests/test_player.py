@@ -583,3 +583,171 @@ def test_a_small_caption_size_on_the_image_gives_smaller_text(make_player):
 
     root = make_player().paths.base
     assert text_height(root / "a", 14) < text_height(root / "b", 0)
+
+
+# -- diaporamas (modes pipiquant et photos) ---------------------------------
+
+ALBUM = "https://photos.google.com/share/AF1QipX?key=abc"
+
+
+def test_a_slide_mode_shows_a_slide_instead_of_a_film_frame(make_player):
+    ctx = make_player(mode="pipiquant", pipiquant_interval=600)
+    ctx.player.tick()
+    assert ctx.slides.calls == ["pipiquant"] and ctx.frames.calls == [] and len(ctx.display.shown) == 1
+    assert ctx.player.next_frame_at == ctx.clock() + 600
+
+
+def test_nothing_is_drawn_before_the_interval_then_a_new_slide_comes(make_player):
+    ctx = make_player(mode="pipiquant", pipiquant_interval=600)
+    ctx.player.tick()
+    ctx.clock.advance(599)
+    ctx.player.tick()
+    assert len(ctx.slides.calls) == 1
+    ctx.clock.advance(2)
+    ctx.player.tick()
+    assert len(ctx.slides.calls) == 2 and len(ctx.display.shown) == 2
+
+
+def test_the_photos_mode_uses_its_own_interval(make_player):
+    ctx = make_player(mode="photos", photos_interval=1800, pipiquant_interval=300, photos_album_url=ALBUM)
+    ctx.player.tick()
+    assert ctx.slides.calls == ["photos"] and ctx.player.next_frame_at == ctx.clock() + 1800
+
+
+def test_the_slide_caption_uses_its_own_size_and_the_bottom_margin(make_player):
+    from PIL import ImageChops
+    plain = make_player(mode="pipiquant", caption_margin=60)
+    plain.player.tick()
+    ctx = make_player(base=plain.paths.base / "c", mode="pipiquant", caption_margin=60)
+    ctx.slides.caption, ctx.slides.caption_size = "π-piquant • 1 = 10° • 5 décimales", 14
+    ctx.player.tick()
+    box = ImageChops.difference(plain.display.shown[-1], ctx.display.shown[-1]).getbbox()
+    assert box is not None and box[3] <= 480 - 60 and box[3] - box[1] <= 22
+
+
+def test_a_sent_image_comes_first_and_the_slideshow_resumes_after_it(make_player):
+    ctx = make_player(mode="pipiquant", pipiquant_interval=600)
+    ctx.player.tick()
+    ctx.queue.add(A, png_bytes(size=(800, 480), color="gray"), 60, ctx.clock())
+    ctx.clock.advance(5)
+    ctx.player.tick()
+    assert ctx.player.mode == "IMAGE" and len(ctx.slides.calls) == 1
+    ctx.clock.advance(30)
+    ctx.player.tick()
+    assert len(ctx.slides.calls) == 1                      # l'image envoyée est encore à l'écran
+    ctx.clock.advance(40)
+    ctx.player.tick()
+    assert len(ctx.slides.calls) == 2 and ctx.player.mode == "FILM"
+    assert ctx.player.next_frame_at == ctx.clock() + 600    # le compte à rebours repart de zéro
+
+
+def test_a_failing_slide_keeps_the_screen_and_retries_later(make_player):
+    from slowmovie_inkdrop.player import SLIDE_RETRY_SECONDS
+    from slowmovie_inkdrop.slides import SlideError
+    ctx = make_player(mode="pipiquant", pipiquant_interval=3600)
+    ctx.player.tick()
+    shown = len(ctx.display.shown)
+    ctx.clock.advance(3601)
+    ctx.slides.fail_with = SlideError("Album illisible.")
+    ctx.player.tick()
+    assert len(ctx.display.shown) == shown and ctx.player.error == "Album illisible."
+    assert ctx.player.next_frame_at == ctx.clock() + SLIDE_RETRY_SECONDS
+    ctx.player.tick()                                       # pas de boucle serrée
+    assert len(ctx.slides.calls) == 2
+    ctx.slides.fail_with = None
+    ctx.clock.advance(SLIDE_RETRY_SECONDS + 1)
+    ctx.player.tick()
+    assert ctx.player.error == "" and len(ctx.display.shown) == shown + 1
+
+
+def test_a_display_failure_is_reported_without_crashing(make_player):
+    ctx = make_player(mode="pipiquant")
+
+    def broken(image):
+        raise OSError("écran débranché")
+    ctx.display.display = broken
+    ctx.player.tick()
+    assert "écran débranché" in ctx.player.error
+
+
+def test_without_a_slide_source_the_slideshow_is_reported_unavailable(make_player):
+    ctx = make_player(mode="photos", slides=None, photos_album_url=ALBUM)
+    ctx.player.tick()
+    assert ctx.player.error == "Diaporama indisponible."
+    assert ctx.player.next_frame_at > ctx.clock()
+
+
+def test_a_mode_change_by_command_takes_effect_on_the_next_tick(make_player):
+    ctx = make_player()
+    ctx.player.tick()
+    assert ctx.frames.calls and not ctx.slides.calls
+    fut = ctx.player.submit({"cmd": "settings", "changes": {"mode": "pipiquant"}})
+    ctx.player.tick()
+    assert fut.result(timeout=1) == {"ok": True}
+    assert ctx.slides.calls == ["pipiquant"] and ctx.player.settings.mode == "pipiquant"
+    assert Settings.load(ctx.paths.conf).mode == "pipiquant"
+
+
+def test_going_back_to_slowmovie_resumes_the_film_where_it_was(make_player):
+    ctx = make_player(mode="pipiquant")
+    write_progress(ctx.paths.progress, ctx.library.videos[0], 400)
+    ctx.player.tick()
+    ctx.player.submit({"cmd": "settings", "changes": {"mode": "slowmovie"}})
+    ctx.player.tick()
+    assert ctx.frames.calls == [("a.mp4", 400)]
+
+
+def test_a_mode_change_does_not_interrupt_a_sent_image(make_player):
+    ctx = make_player(mode="slowmovie")
+    ctx.queue.add(A, png_bytes(size=(800, 480), color="gray"), 60, ctx.clock())
+    ctx.player.tick()
+    assert ctx.player.mode == "IMAGE"
+    shown = len(ctx.display.shown)
+    ctx.player.submit({"cmd": "settings", "changes": {"mode": "pipiquant"}})
+    ctx.clock.advance(10)
+    ctx.player.tick()
+    assert len(ctx.display.shown) == shown and not ctx.slides.calls
+    ctx.clock.advance(60)
+    ctx.player.tick()
+    assert ctx.slides.calls == ["pipiquant"]
+
+
+def test_a_clock_jump_does_not_freeze_the_slideshow(make_player):
+    ctx = make_player(mode="pipiquant", pipiquant_interval=600)
+    ctx.player.tick()
+    ctx.player.next_frame_at = ctx.clock() + 10 * 86400     # horloge du Pi revenue d'un saut
+    ctx.clock.advance(1)
+    ctx.player.tick()
+    assert len(ctx.slides.calls) == 2
+
+
+def test_pause_stops_the_slideshow_resume_and_skip_draw_a_new_slide(make_player):
+    ctx = make_player(mode="pipiquant", pipiquant_interval=600)
+    ctx.player.tick()
+    ctx.player.submit({"cmd": "pause"})
+    ctx.clock.advance(5000)
+    ctx.player.tick()
+    assert len(ctx.slides.calls) == 1
+    ctx.player.submit({"cmd": "resume"})
+    ctx.player.tick()
+    assert len(ctx.slides.calls) == 2
+    ctx.player.submit({"cmd": "skip"})
+    ctx.player.tick()
+    assert len(ctx.slides.calls) == 3
+
+
+def test_nothing_is_drawn_outside_the_active_hours(make_player):
+    ctx = make_player(mode="pipiquant", active_hours="08:00-09:00")
+    noon = datetime(2026, 1, 1, 12, 0).timestamp()
+    ctx.clock.t = noon
+    ctx.player.tick()
+    assert not ctx.slides.calls
+
+
+def test_the_state_files_name_the_source(make_player):
+    ctx = make_player(mode="photos", photos_album_url=ALBUM)
+    ctx.player.tick()
+    assert ctx.player.snapshot(ctx.clock())["source"] == "photos"
+    remote = ctx.player.remote_snapshot(ctx.clock())
+    assert remote["source"] == "photos" and remote["next_at"] == ctx.player.next_frame_at
+    assert json.loads(ctx.paths.state.read_text())["source"] == "photos"
