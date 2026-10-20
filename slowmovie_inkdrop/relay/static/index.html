@@ -71,6 +71,7 @@
     <form id="pi-form">
       <label for="pi-duration">Durée d'affichage</label>
       <select id="pi-duration" name="duration"></select>
+      <label class="remember"><input id="pi-title" type="checkbox" checked> Afficher le titre sous le dessin</label>
       <label for="pi-password">Mot de passe</label>
       <input id="pi-password" name="password" type="password" autocomplete="current-password" required>
       <button id="pi-submit" type="submit">Tirer un pi-piquant</button>
@@ -159,7 +160,9 @@ $("pi-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("pi-submit").disabled = true; say("pi-msg", "Dessin en cours…");
   try {
-    const r = await fetch("/api/send-pipiquant", { method: "POST", body: new FormData($("pi-form")) });
+    const form = new FormData($("pi-form"));
+    form.set("title", $("pi-title").checked ? "oui" : "non");
+    const r = await fetch("/api/send-pipiquant", { method: "POST", body: form });
     const body = await r.json().catch(() => ({}));
     if (!r.ok) { say("pi-msg", body.detail || "Erreur " + r.status, "err"); return; }
     if ($("remember").checked) stored("sm-password", $("pi-password").value);

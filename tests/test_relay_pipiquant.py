@@ -48,8 +48,11 @@ def env(tmp_path):
     return make(tmp_path)
 
 
-def draw(client, *, password=PASSWORD, duration="300"):
-    return client.post("/api/send-pipiquant", data={"password": password, "duration": duration})
+def draw(client, *, password=PASSWORD, duration="300", title=None):
+    data = {"password": password, "duration": duration}
+    if title is not None:
+        data["title"] = title
+    return client.post("/api/send-pipiquant", data=data)
 
 
 def query(request: httpx.Request) -> dict[str, str]:
@@ -81,6 +84,28 @@ def test_the_legend_travels_as_the_caption(tmp_path):
     client2, _ = make(tmp_path / "b", rng=Extreme("lo"))
     draw(client2)
     assert client2.get("/api/device/pending", headers=DEVICE).json()[0]["caption"] == "π-piquant • 1 = 1° • 1 décimale"
+
+
+def test_the_title_can_be_left_out(env):
+    client, api = env
+    assert draw(client, title="non").status_code == 202
+    (item,) = client.get("/api/device/pending", headers=DEVICE).json()
+    assert item["caption"] == ""
+    assert query(api.calls[0])["titre"] == "non"          # jamais de légende dessinée par le service
+
+
+def test_the_title_is_shown_by_default_or_when_asked(env):
+    client, _ = env
+    assert draw(client, title="oui").status_code == 202
+    assert draw(client).status_code == 202
+    captions = [i["caption"] for i in client.get("/api/device/pending", headers=DEVICE).json()]
+    assert len(captions) == 2 and all(c.startswith("π-piquant • 1 = ") for c in captions)
+
+
+@pytest.mark.parametrize("bad", ["peut-être", "1", "true", "OUI"])
+def test_an_unknown_title_choice_is_refused_before_the_api(env, bad):
+    client, api = env
+    assert draw(client, title=bad).status_code == 422 and not api.calls
 
 
 def test_the_image_is_queued_like_an_upload(env):
@@ -223,7 +248,7 @@ def test_a_body_without_length_or_too_big_is_refused_before_parsing(env):
 def test_the_main_page_has_the_pipiquant_tab(env):
     client, _ = env
     html = client.get("/").text
-    for expected in ('id="tab-pi"', 'id="panel-pi"', "/api/send-pipiquant", "c.pipiquant"):
+    for expected in ('id="tab-pi"', 'id="panel-pi"', "/api/send-pipiquant", "c.pipiquant", 'id="pi-title"'):
         assert expected in html, expected
 
 

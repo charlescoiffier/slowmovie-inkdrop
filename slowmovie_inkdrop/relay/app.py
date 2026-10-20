@@ -204,17 +204,19 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
             raise unavailable from None
 
     @app.post("/api/send-pipiquant", status_code=202)
-    def send_pipiquant(request: Request, password: str = Form(default=""),
-                       duration: str = Form(default="")) -> JSONResponse:
+    def send_pipiquant(request: Request, password: str = Form(default=""), duration: str = Form(default=""),
+                       title: str = Form(default="oui")) -> JSONResponse:
         if not pipiquant_enabled:
             raise HTTPException(503, "Le pi-piquant est désactivé.")
+        if title not in ("oui", "non"):
+            raise HTTPException(422, "Choix du titre invalide.")
         seconds = check_sender(request, password, duration)
         check_queue()
         decimals = rng.randint(*PIPIQUANT_DECIMALS)
         angle = rng.randint(*PIPIQUANT_ANGLES)
         data = fetch_pipiquant(decimals, angle)
         try:
-            body = enqueue(seconds, data, pipiquant_legend(decimals, angle))
+            body = enqueue(seconds, data, pipiquant_legend(decimals, angle) if title == "oui" else "")
         except HTTPException as exc:
             if exc.status_code in (413, 415, 422):
                 raise HTTPException(502, "Le service π-piquant a renvoyé une image illisible.") from None
