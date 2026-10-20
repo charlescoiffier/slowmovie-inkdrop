@@ -80,3 +80,20 @@ def test_metadata_written_before_captions_existed_still_loads(tmp_path):
     import json
     (tmp_path / f"{A}.json").write_text(json.dumps({"id": A, "duration": 60, "received_at": 0}))
     assert ImageQueue(tmp_path).items()[0].caption == ""
+
+
+def test_caption_size_is_persisted_and_defaults_to_zero(tmp_path):
+    q = ImageQueue(tmp_path)
+    q.add(A, b"1", 60, now=0, caption="π", caption_size=14)
+    assert ImageQueue(tmp_path).items()[0].caption_size == 14
+    q.add(B, b"2", 60, now=1)
+    assert [i.caption_size for i in ImageQueue(tmp_path).items()] == [14, 0]
+
+
+def test_metadata_without_caption_size_loads_as_zero(tmp_path):
+    q = ImageQueue(tmp_path)
+    q.add(A, b"1", 60, now=0)
+    meta = tmp_path / f"{A}.json"
+    import json
+    data = json.loads(meta.read_text()); data.pop("caption_size", None); meta.write_text(json.dumps(data))
+    assert ImageQueue(tmp_path).items()[0].caption_size == 0

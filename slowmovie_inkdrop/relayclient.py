@@ -14,7 +14,7 @@ from PIL import Image
 
 from .config import Settings
 from .image_queue import ImageQueue
-from .imaging import clean_caption
+from .imaging import CAPTION_MAX_SIZE, CAPTION_MIN_SIZE, clean_caption
 from .remote import validate_command
 
 log = logging.getLogger(__name__)
@@ -239,7 +239,10 @@ def sync_cycle(client: RelayClient, queue: ImageQueue, outbox: AckOutbox, settin
                 continue
             try:
                 caption = clean_caption(str(item.get("caption") or ""), settings.caption_max_chars)
-                queue.add(image_id, data, duration, now, caption=caption)
+                size = item.get("caption_size")
+                if isinstance(size, bool) or not isinstance(size, int) or not CAPTION_MIN_SIZE <= size <= CAPTION_MAX_SIZE:
+                    size = 0
+                queue.add(image_id, data, duration, now, caption=caption, caption_size=size)
             except ValueError:
                 log.warning("identifiant refusé par le Pi : %r", image_id)
                 continue

@@ -565,3 +565,21 @@ def test_remote_snapshot_never_contains_the_album_link(make_player):
     assert snap["settings"]["mode"] == "slowmovie"
     plain = make_player(base=ctx.paths.base / "o").player.remote_snapshot(0)
     assert plain["settings"]["photos_album_set"] is False and plain["settings"]["photos_album_host"] == ""
+
+
+def test_a_small_caption_size_on_the_image_gives_smaller_text(make_player):
+    from PIL import ImageChops
+
+    def text_height(name, size):
+        plain = make_player(base=name / "p")
+        plain.queue.add(A, png_bytes(size=(800, 480), color="gray"), 60, plain.clock())
+        plain.player.tick()
+        ctx = make_player(base=name / "t")
+        ctx.queue.add(A, png_bytes(size=(800, 480), color="gray"), 60, ctx.clock(), caption="Bonjour",
+                      caption_size=size)
+        ctx.player.tick()
+        box = ImageChops.difference(plain.display.shown[-1], ctx.display.shown[-1]).getbbox()
+        return box[3] - box[1]
+
+    root = make_player().paths.base
+    assert text_height(root / "a", 14) < text_height(root / "b", 0)

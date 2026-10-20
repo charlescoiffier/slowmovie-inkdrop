@@ -20,7 +20,7 @@ from .album_url import album_host
 from .config import Paths, Settings, in_active_hours
 from .display import Display
 from .image_queue import ImageQueue, QueuedImage
-from .imaging import clean_caption, draw_caption, to_panel
+from .imaging import CAPTION_MAX_SIZE, clean_caption, draw_caption, to_panel
 from .remote import REMOTE_SETTINGS, SECRET_SETTINGS, check_setting_value
 from .starts import StartPoints, seconds_to_frame
 from .videos import VideoInfo, has_progress, next_video, probe_video, read_progress, write_progress
@@ -131,7 +131,8 @@ class Player:
                 raw.load()
                 panel = to_panel(raw, (self.display.width, self.display.height), contrast=s.contrast)
             panel = draw_caption(panel, clean_caption(item.caption, s.caption_max_chars),
-                                 bottom_margin=s.caption_margin)
+                                 bottom_margin=s.caption_margin,
+                                 max_size=item.caption_size or CAPTION_MAX_SIZE)
         except Exception as exc:  # noqa: BLE001 - bombe de décompression, mémoire... : l'image est écartée
             log.warning("image %s illisible : %s", item.id, exc)
             self.error = f"Image reçue illisible ({item.id[:8]})"

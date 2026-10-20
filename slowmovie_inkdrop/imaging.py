@@ -141,11 +141,12 @@ def _drawable(text: str, font) -> str:
     return "".join(out)
 
 
+CAPTION_MIN_SIZE = 10      # bornes du corps demandé par le relais
 CAPTION_MAX_SIZE = 20      # corps de départ (px) : discret sur l'écran e-paper 7,5"
 
 
 def draw_caption(img: Image.Image, text: str, *, margin: int = 12, bottom_margin: int = 40,
-                 max_lines: int = 3) -> Image.Image:
+                 max_lines: int = 3, max_size: int = CAPTION_MAX_SIZE) -> Image.Image:
     """Dessine `text` en blanc cerclé de noir, centré en bas de l'image (copie ; l'original est intact).
 
     `margin` est la marge latérale ; `bottom_margin` laisse du vide sous le texte (cadre de l'écran)."""
@@ -155,7 +156,7 @@ def draw_caption(img: Image.Image, text: str, *, margin: int = 12, bottom_margin
     out = img.convert("RGB").copy()
     width, height = out.size
     draw = ImageDraw.Draw(out)
-    for size in range(CAPTION_MAX_SIZE, 13, -2):                     # plus petit si le texte ne tient pas
+    for size in range(max_size, 13, -2):                     # plus petit si le texte ne tient pas
         font = find_caption_font(size)
         lines = _wrap(draw, _drawable(text, font), font, width - 2 * margin)
         if len(lines) <= max_lines:

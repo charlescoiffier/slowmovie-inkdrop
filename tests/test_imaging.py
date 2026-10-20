@@ -205,3 +205,11 @@ def test_font_can_be_forced_with_an_environment_variable(monkeypatch, tmp_path):
     monkeypatch.setenv("SLOWMOVIE_FONT", str(tmp_path / "absente.ttf"))
     assert find_caption_font(20) is not None          # police introuvable : repli, pas d'exception
     find_caption_font.cache_clear()
+
+
+def test_draw_caption_respects_a_smaller_maximum_size():
+    base = Image.new("RGB", (800, 480), (120, 120, 120))
+    _, top20, _, bottom20 = _bbox_of_change(base, draw_caption(base, "Bonjour"))
+    _, top14, _, bottom14 = _bbox_of_change(base, draw_caption(base, "Bonjour", max_size=14))
+    assert (bottom14 - top14) < (bottom20 - top20) and bottom14 - top14 <= 22
+    assert bottom14 <= 480 - 40

@@ -22,6 +22,7 @@ class QueuedImage:
     duration: int
     received_at: float
     caption: str = ""
+    caption_size: int = 0        # 0 : corps par défaut
 
 
 class ImageQueue:
@@ -44,7 +45,7 @@ class ImageQueue:
                     raise ValueError(image_id)
                 found.append(QueuedImage(image_id, self.directory / f"{image_id}.png",
                                          int(data["duration"]), float(data["received_at"]),
-                                         str(data.get("caption", ""))))
+                                         str(data.get("caption", "")), int(data.get("caption_size", 0))))
             except (OSError, ValueError, KeyError, TypeError):
                 continue
         return sorted(found, key=lambda i: i.received_at)
@@ -63,7 +64,7 @@ class ImageQueue:
 
     # -- écriture --------------------------------------------------------
     def add(self, image_id: str, data: bytes, duration: int, now: float,
-            caption: str = "") -> QueuedImage:
+            caption: str = "", caption_size: int = 0) -> QueuedImage:
         if not _ID.fullmatch(image_id):
             raise ValueError(f"identifiant d'image invalide : {image_id!r}")
         if len(self) >= self.max_items:
@@ -73,9 +74,9 @@ class ImageQueue:
         meta = self.directory / f"{image_id}.json"
         tmp = meta.with_suffix(".tmp")
         tmp.write_text(json.dumps({"id": image_id, "duration": int(duration), "received_at": now,
-                                   "caption": caption}))
+                                   "caption": caption, "caption_size": int(caption_size)}))
         os.replace(tmp, meta)  # le .json en dernier : une écriture partielle reste invisible
-        return QueuedImage(image_id, path, int(duration), now, caption)
+        return QueuedImage(image_id, path, int(duration), now, caption, int(caption_size))
 
     def peek(self, now: float) -> QueuedImage | None:
         for item in self.items():

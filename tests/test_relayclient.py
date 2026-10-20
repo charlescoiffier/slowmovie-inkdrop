@@ -343,3 +343,19 @@ def test_a_crash_between_applying_and_logging_never_replays_the_command(tmp_path
     assert player.received == []                               # jamais rejouée
     assert relay.acks[-1][0] == A and relay.acks[-1][1]["status"] == "failed"
     assert "interrompue" in relay.acks[-1][1]["message"]
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("raw, expected", [
+    (14, 14), (10, 10), (20, 20), (9, 0), (21, 0), (0, 0), (-5, 0), (True, 0), ("14", 0), (14.0, 0), (None, 0),
+])
+def test_caption_size_from_the_relay_is_validated(tmp_path, raw, expected):
+    item = {"id": A, "duration": 60, "caption": "x"}
+    if raw is not None:
+        item["caption_size"] = raw
+    relay = FakeRelay([item], {A: png()})
+    queue, outbox = make(tmp_path)
+    sync_cycle(relay.client(), queue, outbox, Settings(), now=1)
+    assert queue.items()[0].caption_size == expected
