@@ -34,7 +34,11 @@ class Store:
             self._db.execute("CREATE TABLE IF NOT EXISTS commands (id TEXT PRIMARY KEY, kind TEXT NOT NULL, "
                              "payload TEXT NOT NULL, status TEXT NOT NULL, message TEXT NOT NULL DEFAULT '', "
                              "created_at REAL NOT NULL, done_at REAL)")
+            self._db.execute("CREATE TABLE IF NOT EXISTS mode_drafts (mode TEXT PRIMARY KEY, changes TEXT NOT NULL, "
+                             "command_id TEXT, sent TEXT)")
             self._db.commit()
+        self.current_dir = data_dir / "current"
+        self.current_dir.mkdir(parents=True, exist_ok=True)
 
     def image_path(self, image_id: str) -> Path:
         return self.images / f"{image_id}.png"
@@ -136,8 +140,12 @@ class Store:
 
     def expire_commands(self, now: float, ttl: float) -> None:
         with self._lock:
+            expired = [r["id"] for r in self._db.execute(
+                "SELECT id FROM commands WHERE status = 'pending' AND created_at < ?", (now - ttl,))]
             self._db.execute("UPDATE commands SET status = 'expired', done_at = ? "
                              "WHERE status = 'pending' AND created_at < ?", (now, now - ttl))
+            for command_id in expired:
+                self._settle_drafts(command_id, applied=False)
             self._db.execute("DELETE FROM commands WHERE created_at < ?", (now - 86400,))
             self._redact_finished()
             self._db.commit()
@@ -159,6 +167,8 @@ class Store:
                                       "WHERE id = ? AND status = 'pending'",
                                       (status, message[:300], now, command_id))
             self._redact_finished()
+            if cursor.rowcount == 1:
+                self._settle_drafts(command_id, applied=status == "applied")
             self._db.commit()
             return cursor.rowcount == 1
 
@@ -173,3 +183,61 @@ class Store:
             rows = self._db.execute("SELECT id, kind, status, message, created_at FROM commands "
                                     "ORDER BY created_at DESC, id DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]
+
+    # -- brouillons de réglages : transmis au Pi seulement à l'activation du mode ---------------
+    def drafts(self) -> dict[str, dict]:
+        with self._lock:
+            rows = self._db.execute("SELECT mode, changes FROM mode_drafts").fetchall()
+        return {r["mode"]: json.loads(r["changes"]) for r in rows if json.loads(r["changes"])}
+
+    def draft_for(self, mode: str) -> dict:
+        return self.drafts().get(mode, {})
+
+    def merge_draft(self, mode: str, changes: dict) -> None:
+        with self._lock:
+            row = self._db.execute("SELECT changes FROM mode_drafts WHERE mode = ?", (mode,)).fetchone()
+            merged = {**(json.loads(row["changes"]) if row else {}), **changes}
+            self._db.execute("INSERT INTO mode_drafts (mode, changes) VALUES (?, ?) "
+                             "ON CONFLICT(mode) DO UPDATE SET changes = excluded.changes",
+                             (mode, json.dumps(merged)))
+            self._db.commit()
+
+    def clear_draft(self, mode: str) -> None:
+        with self._lock:
+            self._db.execute("DELETE FROM mode_drafts WHERE mode = ?", (mode,))
+            self._db.commit()
+
+    def attach_draft(self, mode: str, command_id: str, sent: dict) -> None:
+        """Le brouillon part avec la commande d'activation ; on se souvient de ce qui a été envoyé."""
+        with self._lock:
+            self._db.execute("UPDATE mode_drafts SET command_id = ?, sent = ? WHERE mode = ?",
+                             (command_id, json.dumps(sent), mode))
+            self._db.commit()
+
+    def _settle_drafts(self, command_id: str, *, applied: bool) -> None:
+        """Commande terminée : appliquée, le brouillon perd ce qui a été envoyé ; sinon il est conservé."""
+        rows = self._db.execute("SELECT mode, changes, sent FROM mode_drafts WHERE command_id = ?",
+                                (command_id,)).fetchall()
+        for row in rows:
+            remaining = json.loads(row["changes"])
+            if applied:
+                for key, value in json.loads(row["sent"] or "{}").items():
+                    if remaining.get(key) == value:
+                        del remaining[key]
+            if remaining:
+                self._db.execute("UPDATE mode_drafts SET changes = ?, command_id = NULL, sent = NULL WHERE mode = ?",
+                                 (json.dumps(remaining), row["mode"]))
+            else:
+                self._db.execute("DELETE FROM mode_drafts WHERE mode = ?", (row["mode"],))
+
+    # -- dernière diapositive envoyée au Pi (miniature et détails), une par source -------------
+    def save_current_slide(self, source: str, details: dict, thumbnail: bytes, now: float) -> None:
+        (self.current_dir / f"{source}.jpg").write_bytes(thumbnail)
+        (self.current_dir / f"{source}.json").write_text(json.dumps({"details": details, "at": now}))
+
+    def current_slide(self, source: str) -> tuple[dict, bytes, float] | None:
+        try:
+            meta = json.loads((self.current_dir / f"{source}.json").read_text())
+            return meta["details"], (self.current_dir / f"{source}.jpg").read_bytes(), float(meta["at"])
+        except (OSError, ValueError, KeyError):
+            return None

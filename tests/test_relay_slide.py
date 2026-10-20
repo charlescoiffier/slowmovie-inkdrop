@@ -168,7 +168,7 @@ def test_an_unexpected_failure_while_reading_an_album_is_a_clean_502(tmp_path, c
     caplog.set_level(_logging.DEBUG)
 
     class Exploding:
-        def photo(self, url):
+        def photo_with_position(self, url):
             raise RuntimeError(f"boom {url}")
 
     world = World()
@@ -179,3 +179,26 @@ def test_an_unexpected_failure_while_reading_an_album_is_a_clean_502(tmp_path, c
     r = slide(client, {"source": "photos", "album_url": LONG})
     assert r.status_code == 502 and "illisible" in r.json()["detail"]
     assert "SECRET" not in r.text and "SECRET" not in caplog.text and "boom" not in r.text
+
+
+def test_the_last_slide_is_kept_for_the_mode_card(tmp_path):
+    from slowmovie_inkdrop.relay.store import Store
+    client, _ = make(tmp_path, rng=Extreme("hi"))
+    slide(client, {"source": "pipiquant", "title": True})
+    details, thumbnail, _ = Store(tmp_path).current_slide("pipiquant")
+    assert details == {"decimals": 200, "angle": 359} and thumbnail[:2] == b"\xff\xd8"
+    assert Image.open(io.BytesIO(thumbnail)).size[0] <= 320
+    slide(client, {"source": "photos", "album_url": LONG})
+    details, thumbnail, _ = Store(tmp_path).current_slide("photos")
+    assert details == {"index": details["index"], "count": 3} and 1 <= details["index"] <= 3
+    assert Image.open(io.BytesIO(thumbnail)).size[0] <= 320
+
+
+def test_a_failed_slide_does_not_replace_the_kept_one(tmp_path):
+    from slowmovie_inkdrop.relay.store import Store
+    client, world = make(tmp_path)
+    slide(client, {"source": "pipiquant", "title": False})
+    before = Store(tmp_path).current_slide("pipiquant")
+    world.pi_status = 500
+    assert slide(client, {"source": "pipiquant", "title": False}).status_code == 502
+    assert Store(tmp_path).current_slide("pipiquant") == before

@@ -82,7 +82,13 @@ class AlbumPhotos:
         return urls
 
     def photo(self, album_url: str) -> bytes:
-        return self._download(self.rng.choice(self.listing(album_url)) + SIZE_SUFFIX)
+        return self.photo_with_position(album_url)[0]
+
+    def photo_with_position(self, album_url: str) -> tuple[bytes, int, int]:
+        """Une photo au hasard : (octets, rang dans l'album à partir de 1, nombre de photos de l'album)."""
+        urls = self.listing(album_url)
+        index = self.rng.randrange(len(urls)) if hasattr(self.rng, "randrange") else urls.index(self.rng.choice(urls))
+        return self._download(urls[index] + SIZE_SUFFIX), index + 1, len(urls)
 
     def _page(self, url: str) -> str:
         for _ in range(MAX_HOPS + 1):

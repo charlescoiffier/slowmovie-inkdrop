@@ -211,3 +211,15 @@ def test_the_link_never_appears_in_errors_or_logs(caplog):
         album.photo(SHORT)
     for text in (caught.value.message, caught2.value.message, caplog.text, repr(caught.value), repr(caught2.value)):
         assert "SECRET" not in text and "KEYKEY" not in text
+
+
+def test_photo_with_position_reports_rank_and_album_size():
+    web = Web()
+    album, _ = make(web, rng=random.Random(2), cache_seconds=10**9)
+    seen = set()
+    for _ in range(30):
+        data, index, count = album.photo_with_position(LONG)
+        assert data.startswith(b"\xff\xd8") and count == 3 and 1 <= index <= 3
+        assert str(web.calls[-1].url).startswith(web.photos[index - 1])
+        seen.add(index)
+    assert seen == {1, 2, 3}

@@ -1,7 +1,9 @@
 """API du relais : page d'envoi, envoi d'images, routes de l'appareil."""
 from __future__ import annotations
 
+import base64
 import hmac
+import io
 import json
 import logging
 import random
@@ -17,6 +19,7 @@ import httpx
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from PIL import Image
 from pydantic import BaseModel
 
 from ..album_url import valid_album_url
@@ -32,13 +35,31 @@ _ID = re.compile(r"[0-9a-f]{32}")
 _STATUS_FOR_CODE = {"too_large": 413, "format": 415, "corrupt": 422}
 PIPIQUANT_DECIMALS = (1, 200)
 PIPIQUANT_ANGLES = (1, 359)
+def make_thumbnail(png: bytes) -> bytes:
+    """Miniature JPEG de la diapositive envoyée au Pi (affichée derrière le mot de passe général)."""
+    with Image.open(io.BytesIO(png)) as img:
+        img = img.convert("RGB")
+        img.thumbnail((THUMBNAIL_WIDTH, THUMBNAIL_WIDTH))
+        out = io.BytesIO()
+        img.save(out, "JPEG", quality=70)
+        return out.getvalue()
+
+
 def pipiquant_legend(decimals: int, angle: int) -> str:
     return f"π-piquant • 1 = {angle}° • {decimals} {'décimale' if decimals == 1 else 'décimales'}"
 
 
 PIPIQUANT_CAPTION_SIZE = 14      # corps (px) de la légende d'un π-piquant
-SLOWMOVIE_RHYTHMS = (30, 60, 120, 300)             # pastilles du mot de passe général, en secondes
-SLIDE_RHYTHMS = (300, 600, 1800, 3600, 10800)
+SLOWMOVIE_RHYTHMS = (30, 60, 120, 300, 600, 1800)    # pastilles du mot de passe général, en secondes
+SLIDE_RHYTHMS = (300, 600, 1800, 3600, 10800, 21600, 43200, 86400)
+# Réglages propres à chaque mode : modifiables à tout moment, transmis au Pi seulement à l'activation du mode.
+DRAFT_FIELDS = {
+    "slowmovie": {"delay", "increment", "random_file", "random_frames", "loop", "fullscreen", "subtitles",
+                  "subtitle_track", "timecode", "contrast", "active_hours"},
+    "pipiquant": {"pipiquant_interval", "pipiquant_title"},
+    "photos": {"photos_interval", "photos_album_url"},
+}
+THUMBNAIL_WIDTH = 320
 MODE_SOURCES = ("slowmovie", "pipiquant", "photos")
 PIPIQUANT_SIZE = 800      # grand côté en pixels : la largeur de l'écran
 
@@ -242,20 +263,22 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
     def build_slide(body) -> Response:
         if not isinstance(body, dict):
             raise HTTPException(422, "Objet JSON attendu.")
-        source, legend, size = body.get("source"), "", 0
+        source, legend, size, details = body.get("source"), "", 0, {}
         if source == "pipiquant":
             if not isinstance(body.get("title"), bool):
                 raise HTTPException(422, "Le choix du titre doit être vrai ou faux.")
             if not pipiquant_enabled:
                 raise HTTPException(503, "Le pi-piquant est désactivé.")
-            data, legend, _, _ = make_pipiquant(body["title"])
+            data, legend, decimals, angle = make_pipiquant(body["title"])
             size = PIPIQUANT_CAPTION_SIZE if legend else 0
+            details = {"decimals": decimals, "angle": angle}
         elif source == "photos":
             url = body.get("album_url")
             if not valid_album_url(url):
                 raise HTTPException(422, "Lien d'album invalide.")
             try:
-                data = albums.photo(url)
+                data, index, count = albums.photo_with_position(url)
+                details = {"index": index, "count": count}
             except PhotosError as exc:
                 raise HTTPException(502, exc.message) from None
             except Exception as exc:  # noqa: BLE001 - jamais de trace (elle pourrait contenir le lien)
@@ -267,6 +290,10 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
             png = sanitize_upload(data, max_bytes=config.max_upload_bytes)
         except InvalidImage:
             raise HTTPException(502, "L'image reçue est illisible.") from None
+        try:
+            store.save_current_slide(source, details, make_thumbnail(png), clock())
+        except (OSError, ValueError):
+            log.warning("miniature de la diapositive non enregistrée")
         return Response(png, media_type="image/png",
                         headers={"X-Slide-Caption": quote(legend, safe=""), "X-Slide-Caption-Size": str(size)})
 
@@ -351,6 +378,27 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
         mode_limiter.success(ip)
         return data
 
+    def active_source() -> str | None:
+        state, _, _ = device_online()
+        source = state.get("source") if isinstance(state, dict) else None
+        return source if source in MODE_SOURCES else None
+
+    def public_drafts() -> dict:
+        """Brouillons sans le lien d'album (un secret) : seulement le fait qu'il est en attente."""
+        return {mode: {k: (True if k == "photos_album_url" and v else v) for k, v in changes.items()}
+                for mode, changes in store.drafts().items()}
+
+    def settings_for_mode(mode: str, changes: dict) -> JSONResponse:
+        """Réglages d'un mode : envoyés tout de suite si le mode est actif, sinon gardés en brouillon."""
+        try:
+            command = validate_command({"kind": "settings", "changes": changes})
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        if active_source() == mode:
+            return queue_settings(command["changes"])
+        store.merge_draft(mode, command["changes"])
+        return JSONResponse({"draft": True, "mode": mode}, status_code=202)
+
     def queue_settings(changes: dict) -> JSONResponse:
         command = validate_command({"kind": "settings", "changes": changes})
         store.expire_commands(clock(), config.command_ttl_seconds)
@@ -362,6 +410,15 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
 
     def whole(value):
         return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+    def film_info(state) -> dict | None:
+        if not isinstance(state, dict) or not isinstance(state.get("video"), str):
+            return None
+        return {"name": state["video"][:255], "position_seconds": state.get("position_seconds"),
+                "duration_seconds": state.get("duration_seconds")}
+
+    def displaying(state) -> str | None:
+        return state.get("mode") if isinstance(state, dict) and state.get("mode") in ("FILM", "IMAGE") else None
 
     @app.post("/api/mode/state")
     async def mode_state(request: Request) -> dict:
@@ -385,6 +442,7 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
             "album_host": host if isinstance(host, str) and valid_album_url(f"https://{host}/x") else "",
             "next_in_seconds": next_in,
             "error": error[:200] if isinstance(error, str) else "",
+            "film": film_info(state), "displaying": displaying(state), "drafts": public_drafts(),
             "pipiquant_available": pipiquant_enabled,
             "pi_outdated": isinstance(state, dict) and "source" not in state,
             "presets": {"slowmovie": list(SLOWMOVIE_RHYTHMS), "slide": list(SLIDE_RHYTHMS)},
@@ -401,6 +459,20 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
             raise HTTPException(404, "Commande introuvable.")
         return {"status": found["status"], "message": found["message"][:300]}
 
+    @app.post("/api/mode/current")
+    async def mode_current(request: Request) -> dict:
+        """Miniature et détails de la dernière diapositive envoyée au Pi (π-piquant ou photo)."""
+        data = await general_request(request)
+        source = data.get("source")
+        if source not in ("pipiquant", "photos"):
+            raise HTTPException(422, "Mode inconnu.")
+        current = store.current_slide(source)
+        if current is None:
+            raise HTTPException(404, "Aucune diapositive pour l'instant.")
+        details, thumbnail, at = current
+        return {"source": source, "details": details, "age_seconds": max(0, int(clock() - at)),
+                "thumbnail": "data:image/jpeg;base64," + base64.b64encode(thumbnail).decode()}
+
     @app.post("/api/mode/set", status_code=202)
     async def mode_set(request: Request) -> JSONResponse:
         data = await general_request(request)
@@ -409,12 +481,17 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
             raise HTTPException(422, "Mode inconnu.")
         if source == "pipiquant" and not pipiquant_enabled:
             raise HTTPException(503, "Le pi-piquant est désactivé.")
+        draft = store.draft_for(source)
         if source == "photos":
             state, _, _ = device_online()
             settings = (state or {}).get("settings") if isinstance(state, dict) else None
-            if not isinstance(settings, dict) or settings.get("photos_album_set") is not True:
+            known = isinstance(settings, dict) and settings.get("photos_album_set") is True
+            if not known and not draft.get("photos_album_url"):
                 raise HTTPException(409, "Aucun album n'est configuré (réglages administrateur).")
-        return queue_settings({"mode": source})
+        response = queue_settings({"mode": source, **draft})
+        if draft:
+            store.attach_draft(source, json.loads(response.body)["id"], draft)
+        return response
 
     @app.post("/api/mode/rhythm", status_code=202)
     async def mode_rhythm(request: Request) -> JSONResponse:
@@ -424,14 +501,14 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
         allowed = SLOWMOVIE_RHYTHMS if source == "slowmovie" else SLIDE_RHYTHMS
         if field is None or isinstance(seconds, bool) or not isinstance(seconds, int) or seconds not in allowed:
             raise HTTPException(422, "Rythme non proposé.")
-        return queue_settings({field: seconds})
+        return settings_for_mode(source, {field: seconds})
 
     @app.post("/api/mode/title", status_code=202)
     async def mode_title(request: Request) -> JSONResponse:
         data = await general_request(request)
         if not isinstance(data.get("title"), bool):
             raise HTTPException(422, "Le choix du titre doit être vrai ou faux.")
-        return queue_settings({"pipiquant_title": data["title"]})
+        return settings_for_mode("pipiquant", {"pipiquant_title": data["title"]})
 
     # -- administrateur ----------------------------------------------------
     @app.post("/api/admin/login")
@@ -470,12 +547,22 @@ def create_app(config: RelayConfig, *, clock: Callable[[], float] = time.time,
         store.expire_commands(clock(), config.command_ttl_seconds)
         state, received, online = device_online()
         return {"online": online, "last_seen_seconds": None if received is None else int(clock() - received),
-                "state": state, "commands": store.recent_commands(10)}
+                "state": state, "commands": store.recent_commands(10),
+                "source": active_source(), "drafts": public_drafts()}
 
     @app.post("/api/admin/commands", status_code=202, dependencies=[Depends(require_admin)])
     async def admin_command(request: Request) -> JSONResponse:
+        payload = await read_json(request, 4096)
+        for_mode = payload.pop("for_mode", None) if isinstance(payload, dict) else None
+        if for_mode is not None:
+            changes = payload.get("changes") if payload.get("kind") == "settings" else None
+            if for_mode not in MODE_SOURCES or not isinstance(changes, dict):
+                raise HTTPException(422, "Réglages d'un mode : mode ou réglages invalides.")
+            if not set(changes) <= DRAFT_FIELDS[for_mode]:
+                raise HTTPException(422, "Un de ces réglages n'appartient pas à ce mode.")
+            return settings_for_mode(for_mode, changes)
         try:
-            command = validate_command(await read_json(request, 4096))
+            command = validate_command(payload)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
         state, _, online = device_online()
