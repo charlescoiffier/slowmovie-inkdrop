@@ -34,17 +34,18 @@ Raspberry Pi) avec quatre apports :
 
 ## Aperçu
 
-*Captures réalisées avec des données de démonstration (films libres de droits, aucun identifiant réel).*
+*Captures réalisées avec des données de démonstration (films libres de droits, photo Unsplash, aucun identifiant réel).*
 
 ### Sur la passerelle, depuis un téléphone
 
 <table>
   <tr>
-    <td align="center" width="20%"><img src="docs/images/web-connexion.png" alt="Écran de connexion : mot de passe, afficher, se souvenir de moi" width="180"><br><sub>Connexion unique, mot de passe affichable</sub></td>
-    <td align="center" width="20%"><img src="docs/images/web-mode.png" alt="Onglet Mode : le π-piquant en cours avec sa miniature, le rythme et le titre" width="180"><br><sub>Mode actif : miniature du π-piquant en cours, rythme</sub></td>
-    <td align="center" width="20%"><img src="docs/images/web-envoyer.png" alt="Onglet Envoyer : durée en pastilles, tirer un π-piquant" width="180"><br><sub>Envoyer une image ou un π-piquant (durée en pastilles)</sub></td>
-    <td align="center" width="20%"><img src="docs/images/web-reglages.png" alt="Fenêtre des réglages de SlowMovie : film en cours, films, réglages" width="180"><br><sub>⚙ SlowMovie : film en cours, départ et fin, réglages</sub></td>
-    <td align="center" width="20%"><img src="docs/images/web-photos.png" alt="Fenêtre des réglages d'un mode inactif : réglages en attente d'activation" width="180"><br><sub>⚙ d'un mode inactif : réglages envoyés à l'activation</sub></td>
+    <td align="center" width="16%"><img src="docs/images/web-connexion.png" alt="Écran de connexion : mot de passe, afficher, se souvenir de moi" width="150"><br><sub>Connexion unique, mot de passe affichable</sub></td>
+    <td align="center" width="16%"><img src="docs/images/web-mode.png" alt="Onglet Mode : le π-piquant en cours avec sa miniature, le rythme et le titre" width="150"><br><sub>Mode actif : miniature du π-piquant en cours, rythme</sub></td>
+    <td align="center" width="16%"><img src="docs/images/web-envoyer.png" alt="Onglet Envoyer : une photo choisie avec son texte et sa durée en pastilles" width="150"><br><sub>Envoyer une photo avec un texte et une durée</sub></td>
+    <td align="center" width="16%"><img src="docs/images/web-image.png" alt="Onglet Mode : l'image envoyée est à l'écran du Pi" width="150"><br><sub>L'image envoyée est à l'écran : le défilement reprendra ensuite</sub></td>
+    <td align="center" width="16%"><img src="docs/images/web-reglages.png" alt="Fenêtre des réglages de SlowMovie : film en cours, films, réglages" width="150"><br><sub>⚙ SlowMovie : film en cours, départ et fin, réglages</sub></td>
+    <td align="center" width="16%"><img src="docs/images/web-photos.png" alt="Fenêtre des réglages d'un mode inactif : réglages en attente d'activation" width="150"><br><sub>⚙ d'un mode inactif : réglages envoyés à l'activation</sub></td>
   </tr>
 </table>
 
@@ -63,8 +64,9 @@ Raspberry Pi) avec quatre apports :
 
 ### Sur l'écran e-paper
 
-Une image envoyée avec son texte, centré en bas, et un π-piquant avec sa légende (rendu tramé en 1 bit, comme l'écran).
-La marge sous le texte tient compte d'un cadre qui masque le bas de l'écran :
+Une photo envoyée avec son texte, centré en bas, et un π-piquant avec sa légende (rendu tramé en 1 bit, comme l'écran).
+La marge sous le texte tient compte d'un cadre qui masque le bas de l'écran. Photo de démonstration :
+[American Heritage Chocolate](https://unsplash.com/photos/vdx5hPQhXFk) sur Unsplash.
 
 <img src="docs/images/ecran-texte.png" alt="Image envoyée avec un texte sous l'image, rendue en noir et blanc" width="360">
 <img src="docs/images/ecran-pipiquant.png" alt="Un π-piquant avec sa légende, rendu en noir et blanc" width="360">

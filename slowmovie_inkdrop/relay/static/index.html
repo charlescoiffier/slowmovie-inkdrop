@@ -437,7 +437,7 @@ function sentCard() {
   return el("div", { className: "card nowcard" },
     el("img", { src: card.thumbnail, alt: "L'image envoyée en cours d'affichage" }),
     el("div", { className: "grow" }, el("strong", { text: d.caption || "Image envoyée" }),
-      el("div", { className: "hint", text: `Image envoyée, affichée il y a ${duration(card.age_seconds)} · le défilement reprendra ensuite` })));
+      el("div", { className: "hint", text: `Image envoyée, affichée ${card.age_seconds < 5 ? "à l'instant" : "il y a " + duration(card.age_seconds)} · le défilement reprendra ensuite` })));
 }
 /* Ce que le Pi présente : l'image envoyée si c'est elle qui est à l'écran, sinon le film ou le dessin / la photo du mode actif. */
 function nowCard(source, state) {
