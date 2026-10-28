@@ -122,3 +122,21 @@ def test_the_current_slide_is_kept_per_source_and_survives_a_restart(tmp_path):
     assert store.current_slide("pipiquant") == ({"decimals": 87, "angle": 214}, b"\xff\xd8thumb", 5.0)
     assert Store(tmp_path).current_slide("photos") == ({"index": 3, "count": 9}, b"\xff\xd8other", 6.0)
     assert store.current_slide("slowmovie") is None
+
+
+def test_commands_created_at_the_same_instant_keep_their_creation_order(tmp_path):
+    store = Store(tmp_path)
+    ids = [f"{c}" * 8 for c in "zyxwvutsrq"]                 # identifiants volontairement en ordre alphabétique inverse
+    for command_id in ids:
+        store.add_command(command_id, "settings", {"kind": "settings", "changes": {}}, now=100.0)
+    assert [c["id"] for c in store.pending_commands(now=110.0, ttl=600)] == ids
+    assert [c["id"] for c in store.recent_commands(10)] == list(reversed(ids))
+
+
+def test_images_queued_at_the_same_instant_keep_their_order(tmp_path):
+    store = Store(tmp_path)
+    ids = [f"{c}" * 32 for c in "fedcba"]
+    for image_id in ids:
+        store.add(image_id, 60, b"png", 1.0)
+    assert [i["id"] for i in store.offerable(now=2.0, lease=120)] == ids
+    assert [store.position_and_eta(i)[0] for i in ids] == [1, 2, 3, 4, 5, 6]

@@ -67,7 +67,7 @@ class Store:
         with self._lock:
             rows = self._db.execute(
                 "SELECT * FROM items WHERE status = 'queued' OR "
-                "(status = 'fetched' AND COALESCE(fetched_at, 0) < ?) ORDER BY created_at",
+                "(status = 'fetched' AND COALESCE(fetched_at, 0) < ?) ORDER BY created_at, rowid",
                 (now - lease,)).fetchall()
         return [dict(r) for r in rows]
 
@@ -90,7 +90,7 @@ class Store:
     def position_and_eta(self, image_id: str) -> tuple[int, int]:
         with self._lock:
             rows = self._db.execute("SELECT id, duration FROM items WHERE status IN ('queued','fetched') "
-                                    "ORDER BY created_at").fetchall()
+                                    "ORDER BY created_at, rowid").fetchall()
         eta = 0
         for index, row in enumerate(rows, start=1):
             if row["id"] == image_id:
@@ -132,7 +132,7 @@ class Store:
     def pending_commands(self, now: float, ttl: float) -> list[dict]:
         with self._lock:
             rows = self._db.execute("SELECT id, kind, payload FROM commands WHERE status = 'pending' "
-                                    "AND created_at >= ? ORDER BY created_at, id", (now - ttl,)).fetchall()
+                                    "AND created_at >= ? ORDER BY created_at, rowid", (now - ttl,)).fetchall()
         return [{"id": r["id"], "kind": r["kind"], "payload": json.loads(r["payload"])} for r in rows]
 
     def pending_mode_command(self, mode: str) -> bool:
@@ -196,7 +196,7 @@ class Store:
     def recent_commands(self, limit: int) -> list[dict]:
         with self._lock:
             rows = self._db.execute("SELECT id, kind, status, message, created_at FROM commands "
-                                    "ORDER BY created_at DESC, id DESC LIMIT ?", (limit,)).fetchall()
+                                    "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]
 
     # -- brouillons de réglages : transmis au Pi seulement à l'activation du mode ---------------
